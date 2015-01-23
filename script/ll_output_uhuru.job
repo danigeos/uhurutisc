@@ -1,0 +1,808 @@
+#!/bin/zsh
+
+DIR=`pwd`
+##### input ########
+file_results=resultats
+file_erosion=res_erosion
+fileres=e_sedsL_Tm_vis_Q_epeff_epzz.xy
+fvelocity=velocity.xy
+fprin_stress=principal_stress.xy
+fepunt12=epunt12zz.xy
+fcorba1=corba.tmp
+fcorba2=Points.tmp
+
+echo 'Selecciona: '
+echo '             2- Strain Rate Tensor '
+echo '             5- Velocity field'
+echo '             13- elevation, crustal thick, lithospheric thick, surface heat flow'
+echo '             14- elevation, crustal, lithospheric mantle and sediment thicknesses'
+echo '             19- Total erosion + sediment thickness '
+read selec
+
+echo ' Which Project: 1- Alps  2-Tibetan Plateau ?' 
+read sproj
+Mirror=0	## Mirror=1	Symetric from the axis x=0
+
+if [ $sproj -eq 1 ]		####  ALPS
+then 
+   ftopo=/ainsa/ivone/DATA/elevacio/ETOPO5_0E25_40N55.grd
+   lon0=2.4		#AGU: 3.6
+   lat0=42		#After AGU:42.6		#AGU: 41.4
+   latmig=46
+   Bx_tics="a4f2"
+   By_tics="a2f1"
+else				#### Tibet
+   ##ftopo=/ainsa/ivone/DATA/elevacio/GTOPO30/GTOPO30_60E130_5N70_5m.grd
+   #ftopo=/Work/DATA/elevation/GINA/GINA_60E120_5N60.grd
+   ftopo=/Work/DATA/elevation/GINA/GINA_sample025_Fg150.grd
+   fcrust=/Work/DATA/Crust_Lithosphere_thickness/Crust2/CRUST2_crust_thick.grd
+   lon0=85
+   lat0=14	#13	#15
+   latmig=30
+   Bx_tics="a10f5"
+   By_tics="a10f5"
+fi
+echo  lon0=$lon0 ,   lat0= $lat0 , latmig=$latmig
+echo "ok? "
+read ok
+
+echo $lon0 $lat0 $latmig > filePosition_xytoll.tmp
+
+echo ' Extension to be plotted (resultats*)?'
+read ext_res
+graficsth <<END
+$file_results$ext_res
+END
+
+Tcolor=2		##  1 = color
+
+awk '{print $0}' limits.d | read x1 x2 y1 y2 x2vel y2vel 
+
+awk '{print 0,0}' limits.d > file_xy.tmp
+awk '{print $2*1e3+$1*1e3,$4*1e3+$3*1e3}' limits.d >> file_xy.tmp
+awk '{if($1==">" || $1=="#") {print $0} else {print $1*1e3,$2*1e3}}' $fcorba1 >> file_xy.tmp
+if [ $Mirror -eq 1 ]		####  TIBET  =  Mirror
+then 
+   awk '{if($1!="#"){print -$1*1e3,$2*1e3} }' $fcorba1 >> file_xy.tmp
+fi
+
+echo " call 1"
+/home/ivone/jobs/xytoll_reals.job	## input: file_xy.tmp,filePosition_xytoll.tmp   output: file_ll.tmp
+
+awk '{if(NR==1){print $0} }' file_ll.tmp | read lon1 lat1
+awk '{if(NR==2){print $0} }' file_ll.tmp | read lon2 lat2
+#echo "> " > filecorba1.tmp
+awk '{if(NR>2){print $0} }' file_ll.tmp > filecorba1.tmp
+
+wc $fcorba2 | read npunts2 a b c
+if [ $npunts2 -gt 0 ] 
+then
+   nrow2=$(($npunts2-17)) 
+   awk '{if(NR>nrow2){print $1*1e3,$2*1e3}}' nrow2=$nrow2 $fcorba2 > file_xy.tmp
+   echo " call 2"
+   /home/ivone/jobs/xytoll_reals.job	## input: file_xy.tmp,filePosition_xytoll.tmp   output: file_ll.tmp
+   mv file_ll.tmp filecorba2.tmp
+fi
+
+regiolon=$lon1/$lon2/$lat1/$lat2
+echo " regiolon" $regiolon
+
+#regiol=2/23.4/44/53.4
+if [ $sproj -eq 1 ]		####  ALPS
+then 
+   lonmin=$lon0		#4
+   lonmax=17	#19		#20
+   latmin=$lat0		##42.4
+   latmax=49		#50
+   Dx_l=0.2
+   Jprojection="-Jm"
+   xscale1=1.1	# 0.65		#Kastrup1.6		#Calais: 1.215
+   xscale4=0.46
+else				####  TIBET
+if [ $Mirror -eq 1 ]		####  TIBET  =  Mirror
+then 
+   lonmin=50
+ else
+   lonmin=$lon1  
+fi
+   lonmax=120		#$lon2	
+   latmin=$lat1
+   latmax=67		#$lat2
+   Dx_l=0.5
+   Jprojection="-Jx"
+   xscale1=0.2
+   xscale4=0.11
+fi
+regiol=$lonmin/$lonmax/$latmin/$latmax
+regiox=$x1/$x2/$y1/$y2
+
+echo "--------------------------------------------------------------"
+echo "    Regio real x, y:             " $regiox
+echo "    Regio real longitut, latitut:" $regiolon
+echo "    Regio figura lon, lat:       " $regiol
+echo "--------------------------------------------------------------"
+echo ' es coherent? 1-No'
+read aaa
+if [ $aaa -eq 1 ]
+then
+echo 'write the new region ex: lonmin lonmax latmin latmax'
+echo ' coherent with Dx=' $Dx_l
+echo ' lonmin ?'
+read lonmin 
+echo '  lonmax?'
+read lonmax
+echo '  latmin?'
+read latmin 
+echo '  latmax?'
+read latmax
+regiol=$lonmin/$lonmax/$latmin/$latmax
+echo $regiol
+fi
+
+
+if [ $selec -eq 2 ]	###   Horizontal strain rate tensor
+then
+FILEPS=StrainRateTensor_ll.ps
+rm $FILEPS
+line_jump=23	#26	#19	#11	## plot a symbol each ..... points
+
+Label_SR_yr=0.3e-8	#compression: 3e-8	#0.3e-8
+fac_srate=2e16		#compression: 0.2e16	#1.8e16
+ep_min=0.02
+
+#awk '{if(NR==1){printf "%5.2f ", Label_SR_yr/3.1536e7} }' Label_SR_yr=$Label_SR_yr $fepunt12  | read Label_SR 
+awk '{if(NR==1){print Label_SR_yr/3.1536e7} }' Label_SR_yr=$Label_SR_yr $fepunt12 | read Label_SR
+echo 800 -200  90  $Label_SR  > file_label.tmp
+#awk '{print $1*1e3,$2*1e3,$3,$4*fac_srate,0}' fac_srate=$fac_srate file_label.tmp > file_xy.tmp
+echo " length of the symbols of the strain rate proportional to its magnitud? 1-Yes"
+read Tlength
+if [ $Tlength -eq 1 ]	###  length of the symbols of the strain rate proportional to its magnitud
+then
+awk ' BEGIN {linia=1}{if(NR==linia) {print $1*1e3,$2*1e3,$6,$3*fac_srate,$4*fac_srate; \
+	linia=linia+line_jump} }' fac_srate=$fac_srate line_jump=$line_jump $fepunt12 > file_xy.tmp
+else
+fac_srate=0.5
+awk ' BEGIN {linia=1}{if(NR==linia) {print $1*1e3,$2*1e3,$6,($3/sqrt($3*$3))*fac_srate,($4/sqrt($4*$4))*fac_srate; \
+	linia=linia+line_jump} }' fac_srate=$fac_srate line_jump=$line_jump $fepunt12 > file_xy.tmp
+fi
+
+echo " call 3"
+/home/ivone/jobs/xytoll_reals.job	######## input: file_xy.tmp,   output: file_ll.tmp
+if [ $Tlength -eq 1 ]	###  scale - label
+then
+   awk '{print 5,48.6,$3,$4*fac_srate}' fac_srate=$fac_srate file_label.tmp >> file_ll.tmp
+fi
+
+awk '{if($4>ep_min) {print $1,$2,$3,$4} }' ep_min=$ep_min file_ll.tmp > file_extension.tmp
+awk '{if($4>ep_min) {print $1,$2,$3+180,$4} }' ep_min=$ep_min file_ll.tmp >> file_extension.tmp
+awk '{if($5>ep_min) {print $1,$2,$3+90,$5} }' ep_min=$ep_min file_ll.tmp >> file_extension.tmp
+awk '{if($5>ep_min) {print $1,$2,$3+270,$5} }' ep_min=$ep_min file_ll.tmp >> file_extension.tmp
+
+awk '{if($4<-ep_min) {print $1,$2,$3,-$4} }' ep_min=$ep_min file_ll.tmp > file_compression.tmp
+awk '{if($4<-ep_min) {print $1,$2,$3+180,-$4} }' ep_min=$ep_min file_ll.tmp >> file_compression.tmp
+awk '{if($5<-ep_min) {print $1,$2,$3+90,-$5} }' ep_min=$ep_min file_ll.tmp >> file_compression.tmp
+awk '{if($5<-ep_min) {print $1,$2,$3+270,-$5} }' ep_min=$ep_min file_ll.tmp >> file_compression.tmp
+
+pstext titol.tmp -R$regiox -Y14 -JX10/7 -N -K -V > $FILEPS
+psbasemap -Y-9.8 -X1 -R$regiol $Jprojection$xscale1 -B$Bx_tics:"Horizontal Strain Rate Tensor":/$By_tics:" \
+	y (km)":enWS -G255/255/255 -O -K -V >> $FILEPS
+
+echo " grdimage of the teconic regime?  1-Yes"
+read timage
+
+if [ $timage -eq 1 ]	# grdimage of the tectonic regime 
+then
+
+awk '{if(NR>linia && $7=="NF") {print $1*1e3,$2*1e3,0.5} }' $fprin_stress > file_xy.tmp
+awk '{if(NR>linia && $7=="NS") {print $1*1e3,$2*1e3,1.5} }' $fprin_stress >> file_xy.tmp
+awk '{if(NR>linia && $7=="SS") {print $1*1e3,$2*1e3,2.5} }' $fprin_stress >> file_xy.tmp
+awk '{if(NR>linia && $7=="TS") {print $1*1e3,$2*1e3,3.5} }' $fprin_stress >> file_xy.tmp
+awk '{if(NR>linia && $7=="TF") {print $1*1e3,$2*1e3,4.5} }' $fprin_stress >> file_xy.tmp
+cat <<END>file_palette_cpt.tmp
+0	180 255 180	1	180 255 180
+1	240 240 130	2	240 240 130
+2	255 150 150	3	255 150 150
+3	250 130 255	4	250 130 255
+4	130 130 255	5	130 130 255
+END
+psscale -Cfile_palette_cpt.tmp -D3/-1/5/.3h -B:" NF    NS    SS   TS    TF ": -O -K -V >> $FILEPS
+Fcolour_e="-W2/0/0/0 -G100/0/0"	# red
+Fcolour_c="-W2/0/0/0 -G0/0/0"
+#Fcolour_e="-W2/255 -G0/0/150"		# blue
+
+else
+
+awk '{if($1!="#"){print $1*1e3,$2*1e3,$3 } }' $fileres > file_xy.tmp  ### grdimage of the elevation (km)
+contour_text=" contours: elevation (km)"
+cat <<END>file_palette_cpt.tmp
+-1	0  200  240	-0.5	0  220  255	
+-0.5	0  220  255	0	120  255  255	
+0	75  180  155	0.100	75  200  125	
+0.100	75  200  125	0.200	75  235   75	
+0.200	75  235   75	0.500	125  255   75	
+0.500	150  255   75	1	175  255   75	
+1	200  255   75	1.5	200  200   75  
+1.5	180  160  100	2	180  160  100	
+2	230  210  150	2.5	240  220  200
+2.5	255  255  255	4	255  255  255
+END
+psscale -Cfile_palette_cpt.tmp -L -D19/4/6/.3 -B:." ": -O -K -V >> $FILEPS
+#Fcolour_e="-W2/0/0/0 -G200/0/0"		# red
+#Fcolour_e="-W2/255 -G0/0/150"		# blue
+Fcolour_e="-W3/0 -G255/255/255"		# white
+Fcolour_c="-W2/0/0/0 -G0/0/0"
+#Fcolour_c=$Fcolour_e
+
+fi
+
+echo " call 4"
+/home/ivone/jobs/xytoll_reals.job	## input: file_xy.tmp,   output: file_ll.tmp
+blockmedian file_ll.tmp -R$regiol -I$Dx_l -V > file_bloc.tmp
+surface file_bloc.tmp -R -Gfile_grd.tmp -I$Dx_l -V
+grdimage file_grd.tmp $Jprojection -R -O -K -Cfile_palette_cpt.tmp -V >> $FILEPS
+grdcontour file_grd.tmp -C0.5 -G2.5/8 -W3/100 -O -K $Jprojection -Bnsew -R -V >> $FILEPS
+
+if [ $timage -eq 1 ]	# grdimage of the tectonic regime 
+then
+awk '{if($1!="#"){print $1*1e3,$2*1e3,$3 } }' $fileres > file_xy.tmp  ### grdimage of the elevation (km)
+contour_text=" contours: elevation (km)"
+
+echo " call 5"
+/home/ivone/jobs/xytoll_reals.job	## input: file_xy.tmp,   output: file_ll.tmp
+blockmedian file_ll.tmp -R$regiol -I$Dx_l -V > file_bloc.tmp
+surface file_bloc.tmp -R -Gfile_grd.tmp -I$Dx_l -V
+grdcontour file_grd.tmp -C0.5 -G2.5/8 -W3/100 -O -K $Jprojection -Bnsew -R -V >> $FILEPS
+fi
+pscoast -R $Jprojection -Di -A500/1 -W6/0 -K -O -V >> $FILEPS
+
+#psxy filecorba2.tmp -R -O -K -M $Jprojection -W10/155/155/155t35_5_0_0:5 -V >> $FILEPS
+#psxy filecorba1.tmp -R -O -K -M $Jprojection -W10/100 -V >> $FILEPS
+psxy file_compression.tmp -R $Jprojection -SV.06/0/0 $Fcolour_c -K -O >> $FILEPS
+#psxy file_extension.tmp -R -N $Jprojection -SV.05/0.2/0.1 -W2/0/0/0 -G0/170/0 -K -O >> $FILEPS
+psxy file_extension.tmp -R $Jprojection -SV.15/0.3/0.15n0.4 $Fcolour_e -K -O >> $FILEPS
+
+if [ $Tlength -eq 1 ]	###  scale - label
+then
+pstext -R $Jprojection -O -K -N -V <<END>> $FILEPS
+5 48.75  11 0 0 2  $Label_SR_yr yr@+-1@+ = $Label_SR s@+-1@+
+END
+fi
+ydir=$(($latmax+0.3)) 
+ydir2=$(($ydir+0.4)) 
+
+pstext -R $Jprojection -O -N -V <<END>> $FILEPS
+$lonmax $ydir 12 0 0 3  $contour_text
+$lon1 $ydir 12 0 0 0  Strain rate tensor plotted each $line_jump points
+$lon1 $ydir2 9 0 4 0 Origen = ($lon0 E, $lat0 N),  lat@-mig@- = $latmig N
+END
+
+gv -landscape -a4 -magstep -3 $FILEPS &
+fi
+
+
+
+
+if [ $selec -eq 5 ]	###   Velocity field
+then
+FILEPS=velocity_ll.ps
+rm $FILEPS
+#min=0.3
+linea_jump=42	#9
+facvel=16		#3
+fvel_mod=1
+vmin=0   	#colapse orogenic
+#facvel=1.3	#colapse orogenic
+#fvel_mod=1	#colapse orogenic
+
+awk '{if($3!=0 || $4!=0){print $1*1e3,$2*1e3,(180/3.1416)*atan2($4,$3),sqrt($3*$3+$4*$4)} \
+	else {print $1,$2,0,0}}' $fvelocity > file_xy.tmp
+echo " call 6"
+/home/ivone/jobs/xytoll_reals.job	## input: file_xy.tmp,   output: file_ll.tmp
+awk '{if($4>=vmin){print ($1,$2,$3,$4/facvel)} }' \
+	facvel=$facvel vmin=$vmin file_ll.tmp > file_vel1.tmp
+awk ' BEGIN {linia=1}
+       {if(NR==linia) {print $1,$2,$3,$4; linia=linia+linea_jump} }' linea_jump=$linea_jump file_vel1.tmp > file_vel2.tmp
+awk '{if($1>=lonmin && $1<=lonmax && $2>=latmin && $2<=latmax) {print $1,$2,$3,$4} }' \
+		lonmin=$lonmin lonmax=$lonmax latmin=$latmin latmax=$latmax file_vel2.tmp > file_vel.tmp
+lon_vel=$(($lonmax+5))
+cat <<END>>file_vel.tmp
+$lon_vel $latmin 0 2
+END
+tic_facvel=$(($facvel*2)) 
+       
+##  vertical strain rate
+text_scale="vertical strain rate (10@+-16@+ s@+-1@+)"
+awk '{if($1!="#"){print $1*1e3,$2*1e3,$11*1e16 }}' $fileres > file_xy.tmp		
+echo " call 7"
+/home/ivone/jobs/xytoll_reals.job	## input: file_xy.tmp,   output: file_ll.tmp
+blockmedian file_ll.tmp -R$regiol -I$Dx_l -V > file_bloc.tmp
+surface file_bloc.tmp -R -Gfile_grd.tmp -I$Dx_l -V
+cat <<END>file_palette_cpt.tmp
+-20	0	0	80	-10	0	0	80
+-10	0	0	150	-3	0	0	150
+-3	57	57	220	-2	57	57	220
+-2	113	113	255	-1	113	113	255
+-1	170	170	255	-0.5	170	170	255
+-0.5	227	227	255	0	227	227	255
+0	255	227	227	0.5	255	227	227
+0.5	255	170	170	1	255	170	170
+1	255	113	113	2	255	113	113
+2	220	57	57	3	220	57	57
+3	150	0	0	10	150	0	0
+10	80	0	0	20	80	0	0
+END
+
+#make_polar_cpt.job <<END   ## Crea la paleta de color
+#file_xy.tmp
+#END
+
+pstext titol.tmp -R$regiox -Y15 -JX10/5 -N -K -V > $FILEPS
+psbasemap -Y-10 -X1 -R$regiol $Jprojection$xscale1 -B$Bx_tics:"velocity  >  $vmin mm/any":/$By_tics:" \
+	y (km)":enWS -G255/255/255 -O -K -V >> $FILEPS
+grdimage file_grd.tmp $Jprojection -R -O -K -Cfile_palette_cpt.tmp -V >> $FILEPS
+psscale -Cfile_palette_cpt.tmp -L -D6/-2/12/.3h -B:" $text_scale ": -O -K -V >> $FILEPS
+pscoast -R $Jprojection -Dl -A500/1 -W4/0 -O -K -V >> $FILEPS
+
+#awk '{if($1!="#"){print $1*1e3,$2*1e3,$5 } }' $fileres > file_xy.tmp			# contours crust
+#echo " call 8"
+#/home/ivone/jobs/xytoll_reals.job	## input: file_xy.tmp,   output: file_ll.tmp
+#blockmedian file_ll.tmp -R$regiol -I$Dx_l -V > file_bloc.tmp
+#surface file_bloc.tmp -R -Gfile_grd.tmp -I$Dx_l -V
+#contour_text=" contours: crustal thickness (km)"
+#grdcontour file_grd.tmp -C3 -A6 -G2.5/8 -W3/0 -O -K $Jprojection -Bnsew -R -V >> $FILEPS
+
+#grdsample $ftopo -Gfile_grd_sample.tmp -N101/101 -V 
+#grdmath file_grd_sample.tmp 1000 DIV = file_topo_grd_km.tmp			# contours real topo
+grdcontour $ftopo -C1 -A2 -G2.5/8 -W3/0 -O -K $Jprojection -Bnsew -R -V >> $FILEPS
+
+
+psxy filecorba2.tmp -R -O -K -M $Jprojection -W10/155/155/155t35_5_0_0:5 -V >> $FILEPS
+#psxy filecorba1.tmp -R -O -K -M $Jprojection -W10/100 -V >> $FILEPS
+psxy filecorba1.tmp -R -O -K -N $Jprojection -Sc.2 -G20 -V >> $FILEPS
+psxy file_vel.tmp -R -K -O -N $Jprojection -Sv.08/0.38/0.15n0.5 -G0 -W2/255 -V >> $FILEPS
+
+lat_veltic=$(($latmin+3))
+pstext -R $Jprojection -O -N -V <<END>> $FILEPS
+$lon_vel 40.7 11 0 0 0 $tic_facvel mm/year
+7 41 11 0 0 0 $contour_text
+END
+
+gv -landscape -a4 -magstep -3 $FILEPS &
+fi
+
+
+if [ $selec -eq 13 ] || [ $selec -eq 14 ]
+then
+FILEPS=structure_ll.ps
+rm $FILEPS
+##----------  FIRST - elevation ----------
+awk '{if($1!="#"){print $1*1e3,$2*1e3,$3} }' $fileres > file_xy.tmp
+if [ $Mirror -eq 1 ]		####  TIBET  =  Mirror
+then 
+   awk '{if($1!="#"){print -$1*1e3,$2*1e3,$3} }' $fileres >> file_xy.tmp
+fi
+echo " call 9"
+/home/ivone/jobs/xytoll_reals.job	## input: file_xy.tmp,   output: file_ll.tmp
+
+blockmedian file_ll.tmp -R$regiol -I$Dx_l -V > file_bloc.tmp
+surface file_bloc.tmp -R -Gfile_grd.tmp -I$Dx_l -V
+if [ $Tcolor -eq 1 ]
+then
+cat <<END>file_palette_cpt.tmp
+-8	0  0  100	-5	0  0  220	
+-5	0  0  220	-3	0  100  220	
+-3	0  100  220	-2	0  150  240	
+-2	0  150  220	-1	0  200  240	
+-1	0  200  240	-0.5	0  220  255	
+-0.5	0  220  255	0	120  255  255	
+0	75  180  155	0.100	75  200  125	
+0.100	75  200  125	0.200	75  235   75	
+0.200	75  235   75	0.500	125  255   75	
+0.500	150  255   75	1	175  255   75	
+1	200  255   75	1.5	200  200   75  
+1.5	180  160  100	2.5	180  160  100	
+2.5	230  210  150	4	240  220  200
+4	255  255  255	7	255  255  255
+END
+else
+cat <<END>file_palette_cpt.tmp
+-3  	10      10      10      0	10      10      10
+0 	60      60      60      0.5	60      60      60
+0.5	100     100     100     1.5	100     100     100
+1.5	150     150     150     2.5	150     150     150
+2.5	200     200     200     3.5	200     200     200
+3.5	230     230     230     4.5	230     230     230
+4.5	255     255     255     7	255     255     255
+END
+fi 
+#grdsample $ftopo -Gfile_grd_sample.tmp -N101/101 -V 
+#grdmath file_grd_sample.tmp 1000 DIV = file_topo_grd_km.tmp
+pstext titol.tmp -P -R$regiox -X2 -Y24 -JX10/5 -N -K -V > $FILEPS
+psbasemap -Y-3.8 -X1 -R$regiol $Jprojection$xscale4 -B$Bx_tics/$By_tics:" ":WNes -G255/255/255 -K -O -V >> $FILEPS
+##grdsample file_grd.tmp -Gfile_grd_sample.tmp -N101/101 -V 
+file_grd=file_grd.tmp
+##grd2cpt $file_grd > file_palette_cpt.tmp
+grdimage $ftopo $Jprojection -R -O -K -Cfile_palette_cpt.tmp -V >> $FILEPS
+pscoast -R $Jprojection -Dl -A1000/1 -W4/255 -K -O -V >> $FILEPS
+#grdimage $file_grd $Jprojection -R -O -K -Cfile_palette_cpt.tmp -V >> $FILEPS
+#psxy filecorba2.tmp -R -O -K -M $Jprojection -W10/155/155/155t35_5_0_0:5 -V >> $FILEPS
+#psxy filecorba2.tmp -R -O -K -M $Jprojection -W10/155/155/155 -V >> $FILEPS
+psxy filecorba1.tmp -R -O -K -M $Jprojection -W5/0/0/255t35_5_0_0:5 -V >> $FILEPS
+grdcontour $file_grd -Bnsew -C0.5 -A1f6 -G2/8 -W3/0 -O -K $Jprojection -R -V >> $FILEPS
+psscale -Cfile_palette_cpt.tmp -L -D13/3/5/.3 -B:." ": -O -K -V >> $FILEPS
+ydir=$(($lat2+12*$Dx_l)) 
+ydir2=$(($ydir+7*$Dx_l)) 
+xtext=$(($lonmax+11*$Dx_l))
+pstext -R $Jprojection -O -K -N -V <<END>> $FILEPS
+$lon1 $ydir2 9 0 4 0 Origen = ($lon0 E, $lat0 N),  lat@-mig@- = $latmig N
+$lon1 $ydir 8 0 4 0 $DIR
+#$xtext $lat2 12 0 4 0  elevation (km)
+$xtext $latmax 12 0 4 0  elevation (km)
+END
+#grdcontour $ftopo -C0.5 -A1f6 -G2.5/8 -W1/0 -O -K $Jprojection -R -V >> $FILEPS
+
+rm file_*.tmp
+
+###-----  SECOND -  crust  -----
+v_text="crustal thickness (km)"							# crustal thickness
+awk '{if($1!="#"){print ($1*1e3,$2*1e3,$5)} }' $fileres > file_xy.tmp		# crustal thickness
+if [ $Mirror -eq 1 ]		####  TIBET  =  Mirror
+then 
+   awk '{if($1!="#"){print -$1*1e3,$2*1e3,$5} }' $fileres >> file_xy.tmp
+fi
+
+#v_text="moho depth (km)"							# Moho depth
+#awk '{if($1!="#"){print ($1*1e3,$2*1e3,($4-$3)+$5)} }' $fileres > file_xy.tmp	# Moho depth
+
+echo " call 10"
+/home/ivone/jobs/xytoll_reals.job	## input: file_xy.tmp,   output: file_ll.tmp
+
+blockmedian file_ll.tmp -R$regiol -I$Dx_l -V > file_bloc.tmp
+surface file_bloc.tmp -R -Gfile_grd.tmp -I$Dx_l -V
+if [ $Tcolor -eq 1 ]
+then
+cat <<END>file_palette_cpt.tmp
+20	255	0	255	24	255	0	255
+24	113	0	255	26	113	0	255
+26	0	28	255	28	0	28	255
+28	0	170	255	30	0	170	255
+30	0	255	199	32	0	255	199
+32	0	255	56	34	0	255	56
+34	85	255	0	36	85	255	0
+36	227	255	0	38	227	255	0
+38	255	142	0	40	255	142	0
+40	255	0	0	60	255	0	0
+60	120	0	0	80	120	0	0
+END
+
+cat <<END> file_palette_cpt.tmp
+5 0 0 100 22 0 0 100
+END
+makecpt -Cjet -T22/55/3 >> file_palette_cpt.tmp 
+cat <<END>> file_palette_cpt.tmp
+55 120 0 0 80 120 0 0
+END
+
+else
+
+cat <<END>file_palette_cpt.tmp
+5  	0       0       0       24	0       0       0
+24 	28      28      28      30	28      28      28
+30 	57      57      57      35	57      57      57
+35 	85      85      85      39	85      85      85
+39	113     113     113     43	113     113     113
+43	142     142     142     47	142     142     142
+47	170     170     170     51	170     170     170
+51	200     200     200     55	200     200     200
+55	227     227     227     60	227     227     227
+60	255     255     255     80	255     255     255
+END
+fi
+
+psbasemap -Y-6.4 -R $Jprojection -B$Bx_tics/$By_tics:" ":Wnes -G255/255/255 -K -O -V >> $FILEPS
+file_grd=file_grd.tmp
+
+if [ $sproj -eq 1 ]		####  TIBET 
+then 
+   grdimage $file_grd $Jprojection -R -O -K -Cfile_palette_cpt.tmp -V >> $FILEPS	## modeled crust
+else
+   grdimage $fcrust $Jprojection -R -O -K -Cfile_palette_cpt.tmp -V >> $FILEPS	## CRUST2 DATA
+fi
+pscoast -R $Jprojection -Dl -A1000/1 -W4/255 -K -O -V >> $FILEPS
+#psxy filecorba1.tmp -R -O -K -M $Jprojection -W5/0/0/255t35_5_0_0:5 -V >> $FILEPS
+psxy filecorba2.tmp -R -O -K -M $Jprojection -W10/155/155/155t35_5_0_0:5 -V >> $FILEPS
+
+grdcontour $file_grd -Bnsew -C5 -A10f6 -G3/8 -O -K $Jprojection -R -V >> $FILEPS	## modeled crust
+#grdcontour $fcrust -Ba -C0.5 -A0.5f6 -G3/8 -W3/0 -O -K $Jprojection -R -V >> $FILEPS	## CRUST2 DATA
+
+psscale -Cfile_palette_cpt.tmp -L -D13/3/5/.3 -B:." ": -O -K -V >> $FILEPS
+pstext -R $Jprojection -O -K -N -V <<END>> $FILEPS
+$xtext $latmax 12 0 4 0 $v_text
+END
+
+rm file_*.tmp 
+
+##----------  THIRD  - lithospheric thickness / lith. mantle thick. ----------
+if [ $Tcolor -eq 1 ]
+then
+cat <<END>file_palette_cpt.tmp
+10	255	200	255	50	255	200	255
+50	255	0	255	60	255	0	255
+60	113	0	255	70	113	0	255
+70	0	28	255	80	0	28	255
+80	0	170	255	90	0	170	255
+90	0	255	199	100	0	255	199
+100	0	255	56	110	0	255	56
+110	85	255	0	120	85	255	0
+120	227	255	0	130	227	255	0
+130	255	142	0	150	255	142	0
+150	255	0	0	200	255	0	0
+END
+
+cat <<END> file_palette_cpt.tmp
+0 0 0 100 10 0 0 100
+END
+makecpt -Cjet -T10/110/10 >> file_palette_cpt.tmp 
+cat <<END>> file_palette_cpt.tmp
+110 120 0 0 150 120 0 0
+END
+
+else
+
+cat <<END>file_palette_cpt.tmp
+0  	0       0       0       30	0       0       0
+30 	28      28      28      40	28      28      28
+40 	57      57      57      50	57      57      57
+50 	85      85      85      60	85      85      85
+60	113     113     113     70	113     113     113
+70	142     142     142     80	142     142     142
+80	170     170     170     90	170     170     170
+90	200     200     200     100	200     200     200
+100	227     227     227     115	227     227     227
+115	255     255     255     150	255     255     255
+END
+fi
+
+#var_text="lithospheric thickness (km)"				   	   # lithospheric thickness
+#awk '{if($1!="#"){print $1*1e3,$2*1e3,$6} }' $fileres > file_xy.tmp	   # lithospheric thickness
+#if [ $Mirror -eq 1 ]		####  TIBET  =  Mirror
+#then 
+#   awk '{if($1!="#"){print -$1*1e3,$2*1e3,$6} }' $fileres >> file_xy.tmp
+#fi
+
+var_text="lithospheric mantle thickness (km)"				   # lithospheric mantle thickness
+awk '{if($1!="#"){print $1*1e3,$2*1e3,$6-$4-$5} }' $fileres > file_xy.tmp  # lithospheric mantle thickness
+if [ $Mirror -eq 1 ]		####  TIBET  =  Mirror
+then 
+   awk '{if($1!="#"){print -$1*1e3,$2*1e3,$6-$4-$5} }' $fileres >> file_xy.tmp
+fi
+
+#var_text="lithosphere depth (km)"				   	# lithosphere depth
+#awk '{if($1!="#"){print $1*1e3,$2*1e3,$6-$3} }' $fileres > file_xy.tmp  # lithosphere depth
+#makecpt -Cjet -T85/185/10 > file_palette_cpt.tmp 
+#cat <<END>> file_palette_cpt.tmp
+#185 120 0 0 200 120 0 0
+#END
+
+echo " call 11"
+/home/ivone/jobs/xytoll_reals.job	## input: file_xy.tmp,   output: file_ll.tmp
+
+blockmedian file_ll.tmp -R$regiol -I$Dx_l -V > file_bloc.tmp
+surface file_bloc.tmp -R -Gfile_grd.tmp -I$Dx_l -V
+
+psbasemap -R -Y-6.4 $Jprojection -B$Bx_tics/$By_tics:" ":Wnes -G255/255/255 -K -O -V >> $FILEPS
+#grdfilter file_grd.tmp -D0 -Fb200 -Gfile_grd_filt.tmp -V
+#grdsample litosfera_grd.tmp -Gfile_grd_sample.tmp -N100/100 -V -R
+file_grd=file_grd.tmp
+grdimage $file_grd $Jprojection -R -O -K -Cfile_palette_cpt.tmp -V >> $FILEPS
+pscoast -R $Jprojection -Dl -A1000/1 -W4/255 -K -O -V >> $FILEPS
+#psxy filecorba1.tmp -R -O -K -M $Jprojection -W5/0/0/255t35_5_0_0:5 -V >> $FILEPS
+psxy filecorba2.tmp -R -O -K -M $Jprojection -W10/155/155/155t35_5_0_0:5 -V >> $FILEPS
+grdcontour $file_grd -Bnsew -C10 -A20f6 -G2.5/8 -O -K $Jprojection -R -V >> $FILEPS
+psscale -Cfile_palette_cpt.tmp -L -D13/3/5/.3 -B:." ": -O -K -V >> $FILEPS
+pstext -R $Jprojection -O -K -N -V <<END>> $FILEPS
+$xtext $latmax 12 0 4 0 $var_text
+END
+
+grdsample file_grd.tmp -Gfile_2grd.tmp -I44.108/33.358 -R -V
+grd2xyz file_2grd.tmp > file_L.tmp
+sort -k 2,2n -k 1,1n -o fileL_ord.tmp file_L.tmp
+rm file_*.tmp
+
+if [ $selec -eq 13 ]
+then
+##----------  FOURTH  - surface heat flow ----------
+awk '{if($1!="#"){print ($1*1e3,$2*1e3,$9)} }' $fileres > file_xy.tmp
+if [ $Mirror -eq 1 ]		####  TIBET  =  Mirror
+then 
+   awk '{if($1!="#"){print -$1*1e3,$2*1e3,$9} }' $fileres >> file_xy.tmp
+fi
+echo " call 12"
+/home/ivone/jobs/xytoll_reals.job	## input: file_xy.tmp,   output: file_ll.tmp
+
+blockmedian file_ll.tmp -R$regiol -I$Dx_l -V > file_bloc.tmp
+surface file_bloc.tmp -R -Gfile_grd.tmp -I$Dx_l -V
+if [ $Tcolor -eq 1 ]
+then
+cat <<END>file_palette_cpt.tmp
+50	255	0	255	55	255	0	255
+55	113	0	255	60	113	0	255
+60	0	28	255	65	0	28	255
+65	0	170	255	70	0	170	255
+70	0	255	199	75	0	255	199
+75	0	255	56	80	0	255	56
+80	85	255	0	85	85	255	0
+85	227	255	0	90	227	255	0
+90	255	142	0	95	255	142	0
+95	255	0	0	100	255	0	0
+END
+else
+cat <<END>file_palette_cpt.tmp
+50  	0       0       0       55	0       0       0
+55 	28      28      28      60	28      28      28
+60 	57      57      57      65	57      57      57
+65 	85      85      85      70	85      85      85
+70	113     113     113     75	113     113     113
+75	142     142     142     80	142     142     142
+80	170     170     170     85	170     170     170
+85	200     200     200     90	200     200     200
+90	227     227     227     95	227     227     227
+95	255     255     255     100	255     255     255
+END
+fi
+
+psbasemap -R -Y-6.4 $Jprojection -B$Bx_tics/$By_tics:" ":WSen -G255/255/255 -K -O -V >> $FILEPS
+#grdfilter file_grd.tmp -D0 -Fb200 -Gfile_grd_filt.tmp -V
+file_grd=file_grd.tmp
+grdimage $file_grd $Jprojection -R -O -K -Cfile_palette_cpt.tmp -V >> $FILEPS
+pscoast -R $Jprojection -Dl -A1000/1 -W4/255 -K -O -V >> $FILEPS
+#psxy filecorba1.tmp -R -O -K -M $Jprojection -W5/0/0/255t35_5_0_0:5 -V >> $FILEPS
+psxy filecorba2.tmp -R -O -K -M $Jprojection -W10/155/155/155t35_5_0_0:5 -V >> $FILEPS
+grdcontour $file_grd -Bnsew -C5 -A10f6 -G2.5/8 -O -K $Jprojection -R -V >> $FILEPS
+psscale -Cfile_palette_cpt.tmp -L -D13/3/5/.3 -B:." ": -O -K -V >> $FILEPS
+pstext -R $Jprojection -O -N -V <<END>> $FILEPS
+$xtext $latmax 12 0 4 0 Surface heat flow (mW/m@+2@+)
+END
+
+fi
+
+
+if [ $selec -eq 14 ]
+then
+##----------  FOURTH  - sediment thickness/erosion ----------
+#awk '{if($1!="#"){print ($1*1e3,$2*1e3,$4)} }' $fileres > file_xy.tmp	### sediment thickness
+file_eros=$file_erosion$ext_res
+min_sed=0	# Minimum sediment thickness
+awk '{print $1/1e3,$2/1e3,-1*$3/1e3 }' $file_eros > file_eros1.tmp	# km
+sort -k 2,2n -k 1,1n -o file_eros.tmp file_eros1.tmp
+wc file_eros.tmp | read row_eros a b c
+awk '{if($1!="#") {printf " %10.2f %10.2f %10.4f\n ",$1,$2,$4 }}' $fileres > file_sediments2.tmp
+awk '{if(NR<=row_eros) {print $0 }}' row_eros=$row_eros file_sediments2.tmp > file_sediments1.tmp
+sort -k 2,2n -k 1,1n -o file_sediments.tmp file_sediments1.tmp
+paste file_eros.tmp file_sediments.tmp > file_eros_sed.tmp
+awk '{if($1!=$4 || $2!=$5) {print "Ojo, fitxers mal ordenats",$1,$4,$2,$5} }' file_eros_sed.tmp 
+awk '{if($6>min_sed) {print $1,$2,$6} else {print $1,$2,$3} }' \
+	min_sed=$min_sed file_eros_sed.tmp > file_xy_km.tmp
+awk '{print $1*1e3,$2*1e3,$3 }' file_xy_km.tmp > file_xy.tmp	### metres
+if [ $Mirror -eq 1 ]		####  TIBET  =  Mirror
+then 
+   awk '{print -$1*1e3,$2*1e3,$3 }' file_xy_km.tmp >> file_xy.tmp
+fi
+
+echo " call 13"
+/home/ivone/jobs/xytoll_reals.job	## input: file_xy.tmp,   output: file_ll.tmp
+
+blockmedian file_ll.tmp -R$regiol -I$Dx_l -V > file_bloc.tmp
+surface file_bloc.tmp -R -Gfile_grd.tmp -I$Dx_l -V
+cat <<END>file_palette_cpt.tmp
+0	255	30	255	0.05	255	30	255
+0.05	200	0	255	0.1	200	0	255
+0.1	113	0	255	0.15	113	0	255
+0.15	0	40	255	0.2	0	40	255
+0.2	0	170	255	0.4	0	170	255
+0.4	0	255	199	0.7	0	255	199
+0.7	0	255	56	1.0	0	255	56
+1.0	227	255	0	1.4	227	255	0
+1.4	255	142	0	1.8	255	142	0
+1.8	255	0	0	2.2	255	0	0
+2.2	170	0	0	3.0	170	0	0
+END
+cat <<END>file_palette_cpt.tmp					# erosion + sediment
+-10	255	100	255	-7	255	100	255
+-7	255	0	255	-5	255	0	255
+-5	180	0	255	-3	180	0	255
+-3	57	57	220	-2	57	57	220
+-2	113	113	255	-1	113	113	255
+-1	170	170	255	-0.5	170	170	255
+-0.5	227	227	255	-0.01	227	227	255
+-0.01	255	255	255	0.01	255	255	255
+0.01	255	255	200	0.5	255	255	200
+0.5	255	255	80	1	255	255	80
+1	255	200	50	2	255	200	50
+2	255	80	0	3	255	80	0
+3	200	0	0	4	200	0	0
+4	100	0	0	7	100	0	0
+END
+
+psbasemap -R -Y-6.4 $Jprojection -B$Bx_tics/$By_tics:" ":WSen -G255/255/255 -K -O -V >> $FILEPS
+#grdfilter file_grd.tmp -D0 -Fb200 -Gfile_grd_filt.tmp -V
+file_grd=file_grd.tmp
+grdimage $file_grd $Jprojection -R -O -K -Cfile_palette_cpt.tmp -V >> $FILEPS
+pscoast -R $Jprojection -Dl -A500/1 -W4/100 -K -O -V >> $FILEPS
+#psxy filecorba1.tmp -R -O -K -M $Jprojection -W5/0/0/255t35_5_0_0:5 -V >> $FILEPS
+psxy filecorba2.tmp -R -O -K -M $Jprojection -W10/155/155/155t35_5_0_0:5 -V >> $FILEPS
+grdcontour $file_grd -Bnsew -L0.001/25 -C0.5 -A1f6 -G2.5/8 -O -K $Jprojection -R -V >> $FILEPS
+psscale -Cfile_palette_cpt.tmp -L -D13/3/5/.3 -B:." ": -O -K -V >> $FILEPS
+pstext -R $Jprojection -O -N -V <<END>> $FILEPS
+$xtext $latmax 12 0 4 0 erosion(-)/sediment(+) thickness (km)
+END
+
+fi
+
+gv -portrait -a4 -magstep -2 $FILEPS &
+fi
+
+
+if [ $selec -eq 19 ]
+then
+echo " total erosion + sediment thickness "
+FILEPS=erosion_sediment.ps
+min_sed=0.01	# Minimum sediment thickness
+echo "   "
+echo "Drainage: Which time step?"  # drainage.st
+read timestep 
+name=drainage
+file_drai=$name$timestep.st
+
+awk '{if(NR>2 && $1!="#") {print $1,$2,$4/1e3 } }' $file_drai > file_eros1.tmp	# km
+sort -k 2,2n -k 1,1n -o file_eros.tmp file_eros1.tmp
+
+awk '{if($1!="#") {print $1,$2,$4 }}' $fileres > file_sediments1.tmp
+sort -k 2,2n -k 1,1n -o file_sediments.tmp file_sediments1.tmp
+
+paste file_eros.tmp file_sediments.tmp > file_eros_sed.tmp
+
+awk '{if($1!=$4 || $2!=$5) {print "Ojo, fitxers mal ordenats",$1,$4,$2,$5} }' file_eros_sed.tmp 
+awk '{if($6>min_sed) {print 1e3*$1,1e3*$2,$6} 
+	else {print 1e3*$1,1e3*$2,-$3} }' min_sed=$min_sed file_eros_sed.tmp > file_xy.tmp
+
+echo " call 14"
+/home/ivone/jobs/xytoll_reals.job	## input: file_xy.tmp,   output: file_ll.tmp
+
+blockmedian file_ll.tmp -R$regiol -I$Dx_l -V > file_bloc.tmp
+surface file_bloc.tmp -R -Gfile_grd.tmp -I$Dx_l -V
+
+pstext titol.tmp -N -R$regiox -Y12 -JX10/7 -N -K -V > $FILEPS
+psbasemap -Y-7 -X1 -R$regiol $Jprojection$xscale1 -B$Bx_tics:" ":/$By_tics:" ":ENWS -G255/255/255 -O -K -V >> $FILEPS
+#grd2cpt file_grd.tmp > file_palette_cpt.tmp
+cat <<END>file_palette_cpt.tmp
+-10	255	0	255	-5	255	0	255
+-5	180	0	255	-3	180	0	255
+-3	57	57	220	-2	57	57	220
+-2	113	113	255	-1	113	113	255
+-1	170	170	255	-0.5	170	170	255
+-0.5	227	227	255	-0.01	227	227	255
+-0.01	255	255	255	0.01	255	255	255
+0.01	255	255	200	0.5	255	255	200
+0.5	255	255	80	1	255	255	80
+1	255	200	50	2	255	200	50
+2	255	120	0	3	255	120	0
+3	200	0	0	4	200	0	0
+4	100	0	0	10	100	0	0
+END
+##grd2cpt -Chot -L0/5 file_grd.tmp > file_palette_cpt.tmp
+grdimage file_grd.tmp $Jprojection -R -O -K -Cfile_palette_cpt.tmp -V >> $FILEPS
+##grdview file_grd.tmp $Jprojection -R -O -K -Cfile_palette_cpt.tmp -Qi50 -V >> $FILEPS
+psscale -Cfile_palette_cpt.tmp -L -D5.5/-1/13/.3h -B:"[km]      \
+	total erosion (-)     and    sediment thickness (+)": -O -K -V >> $FILEPS
+#psxy filecorba1.tmp -R -O -K -M $Jprojection -W10/155/155/155t35_5_0_0:5 -V >> $FILEPS
+psxy filecorba2.tmp -R -O -K -M $Jprojection -W10/155/155/155t35_5_0_0:5 -V >> $FILEPS
+grdcontour file_grd.tmp -Bnsew -C0.5 -A1 -G2.5/8 -L0/8 -O $Jprojection -R -V >> $FILEPS
+
+gv -landscape -a4 -magstep -3 $FILEPS &
+fi
+
+
+rm file*.tmp 
+rm corba.tmp titol.tmp TITOL.tmp punts_falla_xy.res velocity.xy limits.d Points.tmp
+rm e_sedsL_Tm_vis_Q_epeff_epzz.xy epunt12zz.xy escalar_strainrate.xy principal_stress.xy GLit.xy

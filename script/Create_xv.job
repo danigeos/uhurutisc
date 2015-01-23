@@ -1,0 +1,98 @@
+#!/bin/csh -f
+
+@ selec = 17
+@ ext_max = 121
+@ ext = 1
+			##--------------------------------------------------------------
+if ($selec == 5) then	### Crea tots el jpg per l'opcio 5 del output_uhuru.job
+rm velocitat.ps*.jpg
+
+while ($ext <= $ext_max)
+output_uhuru.job <<END
+$selec
+$ext
+1
+END
+@ ext++
+end
+eog velocitat.ps*.jpg &
+
+endif			##--------------------------------------------------------------
+
+			##--------------------------------------------------------------
+if ($selec == 10) then	### Crea tots el jpg per l'opcio 10 del output_uhuru.job
+rm CROSS*.jpg
+
+while ($ext <= $ext_max)
+output_uhuru.job <<END
+$selec
+$ext
+3
+1
+END
+@ ext++
+end
+eog CROSS*.jpg &
+
+endif			##--------------------------------------------------------------
+
+if ($selec == 11) then	### Crea tots el jpg per l'opcio 11 del output_uhuru.job
+rm Rain-Sedim*.jpg
+
+while ($ext <= $ext_max)
+output_uhuru.job <<END
+$selec
+$ext
+1
+END
+@ ext++
+end
+eog Rain-Sedim*.jpg &
+
+endif			##--------------------------------------------------------------
+
+
+if ($selec == 13) then	### Crea tots el jpg per l'opcio 13 del output_uhuru.job
+rm esLQ*.jpgoutput_uhuru.job
+
+while ($ext <= $ext_max)
+output_uhuru.job <<END
+$selec
+$ext
+END
+@ ext++
+end
+eog esLQ*.jpg &
+
+endif			##--------------------------------------------------------------
+
+
+if ($selec == 14) then	### Crea tots el jpg per l'opcio 14 del output_uhuru.job
+rm geometry.ps*.jpg
+
+while ($ext <= $ext_max)
+output_uhuru.job <<END
+$selec
+$ext
+1
+END
+@ ext++
+end
+eog geometry*.jpg &
+
+endif			##--------------------------------------------------------------
+
+if ($selec == 17) then	### Crea tots el jpg per l'opcio 17 del output_uhuru.job
+rm elevation.ps*.jpg
+
+while ($ext <= $ext_max)
+output_uhuru.job <<END
+$selec
+$ext
+1
+END
+@ ext++
+end
+eog elevation*.jpg &
+
+endif			##--------------------------------------------------------------

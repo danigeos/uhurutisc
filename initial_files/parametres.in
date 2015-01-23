@@ -1,0 +1,41 @@
+ ----------- PARAMETRES  (21/02/2013) --------------------------
+No Removal
+1030.0 2450.0 2800.0 3200.0 Densities: water,sediments,crust,asthenosphere [kg/m**3]
+    3.5E-5          VOLUMETRIC THERMAL EXPANSION OF LITHOSPHERIC MANTLE, roalfa [1/K]
+273.0 1800.0 600.D3 SURFACE (z=0) AND BOTTOM (z=ZASTH) TEMPERATURE, [K]
+    1573.0          ISOTHERM BASE LITHOSPHERE (ZISOTER), TISOTER [K]
+     1.E-6          THERMAL DIFFUSIVITY, THDIFF [m**2/s] 
+ 2.4 3.0 3.2 100.0  Conductivities: sediments,crust,lith. mantel and asthenosphere [W/m*K]
+     2.5E-6 15.E+3  Surface [W/m**3] and exponent [m] crustal heat production H=HSURF*exp(-z/HEXP)
+     0.D-6          Lithospheric mantle heat production (constant)  [W/m**3]
+     99             Type of rheological parameters (IRheology_type) if IRheology_type=99 ==> 3 lines:
+ 138.D3 251.D3 523.D3   Power flow activation energy, Qarray [J/mol]: upper crust, lower crust, lithospheric mantle
+ 1.0  1.0  1.0          Power law exponent, enarray: upper crust, lower crust, lithospheric mantle
+ 2.5D-8 3.2D-3 1.D3     Pre-exponencial constant, Aarray [MPa-n s-1]: upper crust, lower crust, lithospheric mantle
+-----------------------------------------------------------------------------
+ 120 106 900 Number of columns (x), rows (y) and vertical (z) : n, m, NELZ
+   4.0E-16 REFERENCE STRAIN RATE, strainrate (s-1)
+         0 MAXIMUM ITERATIONS WITHIN VELOCITY SOLUTION IN EACH TIMESTEP, nitermax
+     0.050 ACCEPTABLE RMS FRACTIONAL ERROR (STOPS ITERATION), tallmax
+       0.5 RELACIO ENTRE LA VELOCITAT ABANS I DESPRES DE ITERAR, alfa (v=alfa*v+(1-alfa)*v0)
+    0.0E+6 BEGINNING OF CALCULATION, tinicial [years]
+   0.50E+6 SIZE OF TIME STEPS, Dtany [years]     
+       120 NUMBER OF TIME STEPS, npasmax
+        11 NUMERO DE PASSOS INTERMITJOS QUE GUARDARE, (NPASINT)
+-------------------- PARTICULAR CONDITIONS -----------------------------------
+ 2 15.E+12  Viscosity strain rate dependent, ITSR= 0-cnst viscosity / 1-Cnst.strainrate / 2-Ef.strainrate / 3-Ef.strainrate only stress envelope
+ 0 45.5 923 185.D3  Convective Removal, Iremoval=0 => No / Time_removal, Zremoval-TISO_rem, Zctall
+	0 iremesh=1 -> Remeshing, when the indenter go norther than Y0+Dy
+5.D-5  0.05   maximum gradients permited (viscosity, Lithosphere) [dvis_allow=[d(vis)/dx/]vis] and diffusive filter (Dif_K)
+--------------- ELASTIC THICKNESS AND SURFACE PROCESSES -----------------------------------
+     65.E3 ELASTIC THICKNESS Te_flexure[m].  if Te_flexure=0 => local isostasy
+	 3 hydro_model
+       0.0 DIFFUSIVE TRANSPORT EROSION COEFFICIENT, Kerosdif [m2/a] 
+     200.0 BACKGROUND RUNOFF (water going to the drainage system), rain [l/m2/a=mm/a]
+       2.0 PROPORTIONALITY OF RUNOFF WITH ALTITUDE, Krain [l/m2/a/km]=[mm/a/km] / OR mean wind velocity [m/s] (Krain>0 and usually Krain<10)
+ 0.0  0.9 windazimut (clockwise from the North) and relative_humidity (0-1)
+    2000.0 evaporation  
+ 80.E3  60.E3   erodability  AND  erodability_sed
+ 60.0   50.E3	K_river_cap  AND  l_fluv_sedim
+ 10.E3  10.E3	CXrain  AND  CYrain
+

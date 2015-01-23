@@ -1,0 +1,62 @@
+#!/bin/zsh
+
+########  UHURU_DP ##################
+executable=UHURU
+
+if [ -f PANTALLA ] 
+then
+echo ' There is a PANTALLA file in this directory'
+echo ' if you run uhuru it will overwrite the existing files'
+echo ' before to run uhuru, delete the file PANTALLA from this directory'
+echo 'end job'
+exit
+fi
+
+DIR=`pwd`					#  input files ---------- 
+geometria=Grid_wedge.in
+ln $geometria fort.11
+
+BC=BC_Half_Ind.in
+ln $BC fort.4
+
+Points=$DIR/Points.in			## optional
+ln $Points fort.10
+
+Bodies=B_Foreland_Indenter.in		## optional
+#ln $Bodies fort.12
+
+TimeBC=Time_BCfiles.in			## optional
+#ln $TimeBC fort.13
+
+Contour=$DIR/Contour_LR.in		## optional
+#ln $Contour fort.44
+
+echo PROGRAMA $executable > PANTALLA		# start run
+date >> PANTALLA
+echo " main directory" $DIR >> PANTALLA
+echo input files: >> PANTALLA
+echo "     "  $geometria >> PANTALLA
+if [ -f fort.13 ] 
+then
+    echo "     "  $TimeBC >> PANTALLA
+else
+    echo "     "  $BC >> PANTALLA
+fi
+if [ -f fort.12 ] 
+then
+   echo "     "  $Bodies >> PANTALLA
+fi
+if [ -f fort.10 ] 
+then
+   echo "     "  $Points >> PANTALLA
+fi
+if [ -f fort.44 ] 
+then
+   echo "     "  $Contour >> PANTALLA
+fi
+
+$executable >> PANTALLA
+
+date >> PANTALLA
+
+rm fort.11 fort.4 fort.12 fort.13 fort.10 fort.44

@@ -1,0 +1,100 @@
+#!/bin/ksh 
+
+rm tall_var.ps
+
+awk '{print $0}' H0/limits.d | read x1 x2 y1 y2 xtall ytall x2vel y2vel VLLEG STREMPa zx zy
+awk '{print ($2-$1)/100 }' H0/limits.d | read iint
+
+#########  VISCOSITAT - Tall en x    #########
+
+psbasemap -P -X1.5 -Y7.7 -R0/2000/1/1000 -JX5.5/3l -Ba500f500:"y (km) ":/a10f10:"@~h@~ (10@+22@+ Pa.s)":W -V -K > tall_var.ps
+psbasemap -R -JX -Banes -K -O -V >> tall_var.ps
+pstext -R -JX -O -K -N -V <<END>> tall_var.ps
+120 2000 11 0 11 0 x=$xtall km
+1600 3500 12 0 11 0 negre - H=0
+1600 2000 12 0 11 0 blau - H=1
+END
+
+awk '{print ($1,$2,$7/1.E22)}' H0/Zsml_Tm_vis_epzz_q.xy > visc.xyz 
+blockmean visc.xyz -I$iint -R$x1/$x2/$y1/$y2 -V > visc.out
+surface visc.out -Gvisc.grd -I$iint -R -T0.75 -V
+project -C$xtall/$y1 -E$xtall/$y2 -N -G50 -M -V > proj.tmp
+
+        grdtrack proj.tmp -Gvisc.grd |\
+                 awk '{print($2,$4)}' | \
+                         psxy -R$y1/$y2/0.01/1000 -JX -W15/0/0/0 -K -O -V >> tall_var.ps
+rm proj.tmp
+rm visc.*
+
+#pstext -R -JX -O -K -V <<END>> tall_var.ps
+#200 50 12 0 5 0 H=0 @~m@~W/m@+3@+
+#100 1.2 12 0 5 0 H=1 @~m@~W/m@+3@+
+#END
+
+awk '{print ($1,$2,$7/1.E22)}' H1/Zsml_Tm_vis_epzz_q.xy > visc.xyz 
+blockmean visc.xyz -I$iint -R$x1/$x2/$y1/$y2 -V > visc.out
+surface visc.out -Gvisc.grd -I$iint -R -T0.75 -V
+project -C$xtall/$y1 -E$xtall/$y2 -N -G50 -M -V > proj.tmp
+
+        grdtrack proj.tmp -Gvisc.grd |\
+                 awk '{print($2,$4)}' | \
+                         psxy -R$y1/$y2/0.01/1000 -JX -W15/0/0/200 -K -O -V >> tall_var.ps
+
+rm proj.tmp
+rm visc.*
+
+#########  STRENGHT - Tall en x    #########
+
+psbasemap -Y-3.25 -R0/2000/1/100 -JX5.5/3l -Ba500f500:"y (km) ":/a1f1:"F@-L@- (10@+12@+ N/m)":W -V -K -O >> tall_var.ps
+psbasemap -R -JX -Banes -K -O -V >> tall_var.ps
+
+awk '{print ($1*66.67,$2*66.67,-$4/1.E12)}' H0/Flit_Zmec.ixiy > strength.xyz 
+blockmean strength.xyz -I$iint -R$x1/$x2/$y1/$y2 -V > strength.out
+surface strength.out -Gstrength.grd -I$iint -R -T0.75 -V
+project -C$xtall/$y1 -E$xtall/$y2 -N -G50 -M -V > proj.tmp
+
+        grdtrack proj.tmp -Gstrength.grd |\
+                 awk '{print($2,$4)}' | \
+                         psxy -R0/2000/1/100 -JX -W15/0/0/0 -K -O -V >> tall_var.ps
+rm proj.tmp
+rm strength.*
+
+awk '{print ($1*66.67,$2*66.67,-$4/1.E12)}' H1/Flit_Zmec.ixiy > strength.xyz 
+blockmean strength.xyz -I$iint -R$x1/$x2/$y1/$y2 -V > strength.out
+surface strength.out -Gstrength.grd -I$iint -R -T0.75 -V
+project -C$xtall/$y1 -E$xtall/$y2 -N -G50 -M -V > proj.tmp
+
+        grdtrack proj.tmp -Gstrength.grd |\
+                 awk '{print($2,$4)}' | \
+                         psxy -R0/2000/1/100 -JX -W15/0/0/200 -K -O -V >> tall_var.ps
+
+rm proj.tmp
+rm strength.*
+
+#########  GRUIX LITOSFERIC - Tall en x    #########
+
+psbasemap -Y-3.25 -R0/2000/50/200 -JX5.5/-3 -Ba500f500:"y (km) ":/a50f25:"gruix litosferic (km)":WS -V -K -O >> tall_var.ps
+psbasemap -R -JX -Banes -K -O -V >> tall_var.ps
+
+awk '{print ($1,$2,$5-$3)}' H0/Zsml_Tm_vis_epzz_q.xy > litosfera.xyz 
+blockmean litosfera.xyz -I$iint -R$x1/$x2/$y1/$y2 -V > litosfera.out
+surface litosfera.out -Glitosfera.grd -I$iint -R -T0.75 -V
+project -C$xtall/$y1 -E$xtall/$y2 -N -G50 -M -V > proj.tmp
+
+        grdtrack proj.tmp -Glitosfera.grd |\
+                 awk '{print($2,$4)}' | \
+                         psxy -R$y1/$y2/50/200 -JX -W15/0/0/0 -K -O -V >> tall_var.ps
+rm proj.tmp
+rm litosfera.*
+
+awk '{print ($1,$2,$5-$3)}' H1/Zsml_Tm_vis_epzz_q.xy > litosfera.xyz 
+blockmean litosfera.xyz -I$iint -R$x1/$x2/$y1/$y2 -V > litosfera.out
+surface litosfera.out -Glitosfera.grd -I$iint -R -T0.75 -V
+project -C$xtall/$y1 -E$xtall/$y2 -N -G50 -M -V > proj.tmp
+
+        grdtrack proj.tmp -Glitosfera.grd |\
+                 awk '{print($2,$4)}' | \
+                         psxy -R$y1/$y2/50/200 -JX -W15/0/0/200 -O -V >> tall_var.ps
+
+rm proj.tmp
+rm litosfera.*

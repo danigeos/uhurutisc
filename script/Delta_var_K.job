@@ -1,0 +1,136 @@
+#!/bin/ksh   
+
+## Correr primer el output_uhuru.job (opcio 16) a cada directori,
+	# per crear els fitxers: *.t (elevation crust i litosferic mantle
+DIR0=0
+DIR1=100
+DIR2=200
+DIR3=300
+#DIR4=400
+DIR5=500
+DIR6=1000
+DIR7=2000
+DIR8=3000
+file_e=elevation.t
+file_s=crust.t
+file_lm=lithospheric_mantle.t
+FILEPS=Delta_var_K.ps
+
+echo "time?"
+read time
+
+
+DIR=$DIR0
+f_elev=K$DIR/$file_e
+f_crust=K$DIR/$file_s
+f_mant=K$DIR/$file_lm             # Kerosdiff, var maxim, var minim
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_elev > file_K_e.tmp
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_crust > file_K_s.tmp
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_mant > file_K_lm.tmp
+ 
+awk '{if($1==0.2) {print DIR,$2-$5} }' DIR=$DIR $f_elev > file_K_e_0.tmp  
+awk '{if($1==0.2) {print DIR,$2-$5} }' DIR=$DIR $f_crust > file_K_s_0.tmp  
+awk '{if($1==0.2) {print DIR,$2-$5} }' DIR=$DIR $f_mant > file_K_lm_0.tmp  
+
+
+DIR=$DIR1
+f_elev=K$DIR/$file_e
+f_crust=K$DIR/$file_s
+f_mant=K$DIR/$file_lm
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_elev >> file_K_e.tmp
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_crust >> file_K_s.tmp
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_mant >> file_K_lm.tmp
+
+DIR=$DIR2
+f_elev=K$DIR/$file_e
+f_crust=K$DIR/$file_s
+f_mant=K$DIR/$file_lm
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_elev >> file_K_e.tmp
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_crust >> file_K_s.tmp
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_mant >> file_K_lm.tmp
+
+DIR=$DIR3
+f_elev=K$DIR/$file_e
+f_crust=K$DIR/$file_s
+f_mant=K$DIR/$file_lm
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_elev >> file_K_e.tmp
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_crust >> file_K_s.tmp
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_mant >> file_K_lm.tmp
+
+DIR=$DIR4
+f_elev=K$DIR/$file_e
+f_crust=K$DIR/$file_s
+f_mant=K$DIR/$file_lm
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_elev >> file_K_e.tmp
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_crust >> file_K_s.tmp
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_mant >> file_K_lm.tmp
+
+DIR=$DIR5
+f_elev=K$DIR/$file_e
+f_crust=K$DIR/$file_s
+f_mant=K$DIR/$file_lm
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_elev >> file_K_e.tmp
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_crust >> file_K_s.tmp
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_mant >> file_K_lm.tmp
+
+DIR=$DIR6
+f_elev=K$DIR/$file_e
+f_crust=K$DIR/$file_s
+f_mant=K$DIR/$file_lm
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_elev >> file_K_e.tmp
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_crust >> file_K_s.tmp
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_mant >> file_K_lm.tmp
+
+DIR=$DIR7
+f_elev=K$DIR/$file_e
+f_crust=K$DIR/$file_s
+f_mant=K$DIR/$file_lm
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_elev >> file_K_e.tmp
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_crust >> file_K_s.tmp
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_mant >> file_K_lm.tmp
+
+DIR=$DIR8
+f_elev=K$DIR/$file_e
+f_crust=K$DIR/$file_s
+f_mant=K$DIR/$file_lm
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_elev >> file_K_e.tmp
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_crust >> file_K_s.tmp
+awk '{if($1==time) {print DIR,$2,$5} }' time=$time DIR=$DIR $f_mant >> file_K_lm.tmp
+
+
+scale=15/5.5
+y_salt=-7
+
+Regio=0/4000/1/6                                # elevation
+psbasemap -P -Y21 -R$Regio -JX$scale -Ba500f250:"K (erosdif) [m@+2@+/a] ":/1f0.5:"  \
+        @~D@~elevation [km] ":WSne -V -K > $FILEPS
+awk '{print $1,$2-$3}' file_K_e.tmp > file_K_Delta.tmp
+psxy file_K_Delta.tmp -R -JX -W4 -N -K -O -V >> $FILEPS
+psxy file_K_Delta.tmp -R -JX -Sc0.1 -N -K -O -V >> $FILEPS
+#awk '{print $1,$2}' file_K_e.tmp > file_K_emax.tmp
+#psxy file_K_emax.tmp -R -Ba/1f0.5:" elevation [km] ":E -JX -Sc0.1 -G0 -N -K -O -V >> $FILEPS
+#awk '{print $1,$3}' file_K_e.tmp > file_K_emin.tmp
+#psxy file_K_emin.tmp -R -JX -Sc0.1 -G0 -N -K -O -V >> $FILEPS
+
+psxy file_K_e_0.tmp -R -JX -Ss0.3 -G200 -N -K -O -V >> $FILEPS
+pstext -R -JX -O -K -N -V <<END>> $FILEPS
+200 6.8 12 0 4 1 $time Myear
+END
+
+Regio=0/4000/24/34
+psbasemap -Y$y_salt -R$Regio -JX -Ba500f250:"K (erosdif) [m@+2@+/a] ":/1f0.5:" \
+        @~D@~crust [km]":WSen -V -K -O >> $FILEPS
+awk '{print $1,$2-$3}' file_K_s.tmp > file_K_Delta.tmp
+psxy file_K_Delta.tmp -R -JX -W4 -N -K -O -V >> $FILEPS
+psxy file_K_Delta.tmp -R -JX -Sc0.1 -N -K -O -V >> $FILEPS
+psxy file_K_s_0.tmp -R -JX -Ss0.3 -G200 -N -K -O -V >> $FILEPS
+
+Regio=0/4000/20/55
+psbasemap -Y$y_salt -R$Regio -JX -Ba500f250:"K (erosdif) [m@+2@+/a] ":/4f2:" \
+        @~D@~lith.mantle [km]":WSen -V -K -O >> $FILEPS
+awk '{print $1,$2-$3}' file_K_lm.tmp > file_K_Delta.tmp
+psxy file_K_Delta.tmp -R -JX -W4 -N -O -K -V >> $FILEPS
+psxy file_K_Delta.tmp -R -JX -Sc0.1 -N -O -K -V >> $FILEPS
+psxy file_K_lm_0.tmp -R -JX -Ss0.3 -G200 -N -O -V >> $FILEPS
+
+rm file_*.tmp

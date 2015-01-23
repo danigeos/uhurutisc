@@ -1,0 +1,1371 @@
+#!/bin/zsh
+
+###################     Crea la malla x, y     ########################
+
+DIR=`pwd`
+##### input ########
+ffile1=~/src/Uhuru/script/Rows
+#ffile1=Rows
+file_random=~/src/Uhuru/script/random_numbers
+##### output ########
+file_out=fileout.in
+file_outsL=Grid.in
+file_outBC=BC.in
+FILEPS=Grid.ps
+FILEPS_th=initial_thickness.ps
+PS_BC=BC.ps
+PI=3.1415926535897932
+FACVEL=3.1536e10
+rm -f  $FILEPS
+echo ATTENTION
+echo 1 - Create the grid and the boundary conditions files
+echo 2 - Create the graphics from the model already created
+read op
+echo "INPUT_DATA=1 ==>  x, y, elevation, surface heat flow (only for neotectonic studies)"
+echo "INPUT_DATA=2 ==>  x, y, elevation, crustal thickness (only for neotectonic studies)"
+echo "INPUT_DATA=3 ==>  x, y, crustal and lithospheric thickness"
+echo "Which kind of input will you use?"
+#read INPUT_DATA
+INPUT_DATA=3
+
+if [ $op -eq 1 ]
+then
+rm -f $file_out $file_outsL $file_outBC $FILEPS_th $PS_BC
+echo 'n: Points in the x direction (ix=0,...,n) ?'
+read n
+echo 'm: Points in the y direction (iy=0,...,m) ?'
+read m
+echo 'Dx: Interval in x direction (metre)?'
+read Dx
+echo 'Dy: Interval in y direction (metre)?'
+read Dy
+
+Dxkm=$(($Dx/1000))
+Dykm=$(($Dy/1000))
+Xmax=$(($n*$Dx/1000))		## echo $n*$Dx/1000 | bc -l | read Xmax
+Ymax=$(($m*$Dy/1000))		## echo $m*$Dy/1000 | bc -l | read Ymax
+nmas1=$(($n+1)) 
+mmas1=$(($m+1))
+nn=$(($nmas1*$mmas1))
+regio=0/$Xmax/0/$Ymax
+
+echo Dx =  $Dx m,   Dy = $Dy m
+echo n = $n,  m = $m
+echo  malla: $nmas1 x $mmas1
+echo interval $Xmax x $Ymax  km
+
+awk '{ix=0
+	while(ix<=n){
+	if(NR<=m+1) print ix*Dx, (NR-1)*Dy	 
+	ix++
+	}
+}' n=$n m=$m Dx=$Dx Dy=$Dy $ffile1 > file_out.tmp
+
+echo ' 1- Crustal and lithospheric thickness constant'
+echo ' 2- Crustal thickness variation, thickened cube'
+echo ' 3- Crustal thickness variation, two domains'
+echo ' 4- Crustal thickness variation, three domains'
+echo ' 5- Crustal thickness variation, circular thickening'
+echo ' 6- Ridge, crustal thickness cnst, lithospheric thicknes vary'
+echo ' 7- Lithospheric thicknes variations, crustal thickness cnst, '
+echo ' 8- Alboran delamination '
+echo ' 9- Alboran delamination + subduction arc W'
+echo ' 10- Alboran delamination + subduction  W-N-S'
+echo ' 11- Crust and lithosphere circular thickness variations'
+echo ' 12- Crust and lithosphere oval thickness variations'
+echo ' 13- Continental colision. Indenter model (diferent structure)'
+echo ' '
+echo ' 15- Alps: Continental colision. Indenter model'
+echo ' 16- Orogeno en forma de arco con un basin en medio, actual Alboran'
+
+
+read type_thick
+
+if [ $type_thick -eq 1 ]
+then
+	echo ' thickness of the crust (km)?'
+	read crust_thick
+	echo ' thickness of the lithosphere (km)?'
+	read lit_thick
+#	echo ' thickness of the sediments (km)?'
+#	read sed_thick
+
+	echo " Crustal thickness noise (add random) ? 1-yes " 
+        read Num_random
+if [ $Num_random -eq 1 ]
+then
+	echo " Add random crustal thickness ? "
+	echo " 	1: meters.   10: 10 meters.    100: 100 meters.    1000: km" 
+        read int_random
+	/home/ivone/src/cc/random > file_Num-random.tmp
+	awk '{if(NR<=nn){print int_random*$0} }' int_random=$int_random nn=$nn file_Num-random.tmp > file_random.tmp
+	paste file_out.tmp file_random.tmp > file_out_random.tmp
+fi	
+	echo "# Homogeni: Lithosphere" $lit_thick km, Crust \
+		$crust_thick km   > $file_outsL
+#		$crust_thick km and Sediments $sed_thick km  > $file_outsL
+	echo $n   $m   $Dx  $Dy  $INPUT_DATA "(n m Dx Dy INPUT_DATA)" >> $file_outsL
+	awk '{print $1,$2,(crust_thick+$3)*1e3,lit_thick*1e3}' \
+		lit_thick=$lit_thick crust_thick=$crust_thick sed_thick=$sed_thick file_out_random.tmp >> $file_outsL
+fi
+if [ $type_thick -eq 2 ]
+then
+	echo "# orogen rectangular. "  > $file_outsL
+	echo $n   $m   $Dx  $Dy  $INPUT_DATA "(n m Dx Dy INPUT_DATA)" >> $file_outsL
+	Dorogen_x=$(($Xmax/3))
+	Dorogen_y=$(($Ymax/3))
+	echo "     Rectangular orogen width:" $Dorogen_x x $Dorogen_y km
+	echo " Enter crustal thickness inside and outside the rectangle:  s_int  s_ext  [meters]"
+	read s_int s_ext
+	echo " Enter lithosphere thickness inside and outside the rectangle:  L_int  L_ext  [meters]"
+	read L_int L_ext
+	#s_int=30e3
+	#s_ext=40e3
+	#L_int=120e3
+	#L_ext=100e3
+	xcentre=$((1000*$Xmax/2)) 
+	ycentre=$((1000*$Ymax/2))
+	x1=$(($xcentre-1000*$Dorogen_x/2))
+	x2=$(($xcentre+1000*$Dorogen_x/2))
+	y1=$(($ycentre-1000*$Dorogen_y/2))
+	y2=$(($ycentre+1000*$Dorogen_y/2))
+
+	awk '{if($1>x1 && $1<x2 && $2>y1 && $2<y2){print $1,$2,s_int,L_int} else {print $1,$2,s_ext,L_ext}}' \
+	 x1=$x1 x2=$x2 y1=$y1 y2=$y2 s_int=$s_int s_ext=$s_ext L_int=$L_int L_ext=$L_ext file_out.tmp >> $file_outsL
+	
+	#awk '{if($1>350e3 && $1<750e3 && $2>350e3 && $2<750e3){print $1,$2,35e3,75e3}
+	#else {print $0}}' file_1.tmp > file_2.tmp
+	
+	#awk '{if($1>450e3 && $1<900e3 && $2>400e3 && $2<530e3){print $1,$2,41e3,75e3}
+	#else {print $0}}' file_2.tmp >> $file_outsL
+fi
+if [ $type_thick -eq 3 ]
+then
+	echo "# Foreland thickened " > $file_outsL
+	echo $n   $m   $Dx  $Dy  $INPUT_DATA "(n m Dx Dy INPUT_DATA)" >> $file_outsL
+	awk '{if($1<1010e3 && $2>601e3){print $1,$2,30e3,100e3}
+	else {print $1,$2,27e3,100e3,0.0}}' file_out.tmp >> $file_outsL
+fi
+if [ $type_thick -eq 4 ]
+then
+	## $3<=Radi1: crust1, Radi1<$3<Radi2: crust1->crust2, 
+	##	Radi2<$3<Radi3: if y > ycentre	=>	crust2->crust4
+	##			if y < ycentre	=>	crust2->crust3
+
+	#litos1=111100	# H exponencial H=3exp(-z/15)
+	#litos2=105000	# 
+
+	litos1=140000	#112000
+	litos2=120000	#105000	 
+
+	#litos1=91000	# H constant
+	#litos2=79000	# H constant
+
+	crust1=50000	
+	crust2=30000
+	#crust3=30000
+	#crust4=30000
+	Radi1=70000	# crust=a*x+b
+	Radi2=200000	#300000
+
+	Radi3=$((500*$Ymax)) 		# Radi3=Ymax/2 [metres]
+#	echo $Ymax_m2-$Radi2 | bc -l | read Radi3	# Radi3=Ymax-Radi2
+	
+	echo "# Cordillera " crust: $crust4/$crust2/$crust1/$crust2/$crust3 m,  lithosphere: $litos2/$litos1/$litos2 m > $file_outsL
+	echo $n   $m   $Dx  $Dy  $INPUT_DATA "(n m Dx Dy INPUT_DATA)" >> $file_outsL
+
+	xcentre=$((1000*$Xmax/2)) 
+	ycentre=$((1000*$Ymax/2)) 
+	awk '{print $1,$2,sqrt(($2-ycentre)*($2-ycentre)) }' \
+		xcentre=$xcentre ycentre=$ycentre file_out.tmp > file_xy_radi.tmp
+     # amb una petita pendent de est a oest ($3>Radi2), si crust_x0 > crust_xmax
+	#crust_x0=$crust2
+	#crust_xmax=$crust2
+	#echo $crust_xmax-$crust_x0 | bc -l | read num_a
+	#echo 0.001*$num_a/$Xmax | bc -l | read a
+	#b=$crust_x0
+	#awk '{if($3<=Radi1){print $1,$2,$3,crust1,litos} else {print $1,$2,$3,$1*a+b,litos}}' \
+	#     crust2=$crust2 crust1=$crust1 a=$a b=$b litos=$litos Radi1=$Radi1 file_xy_radi.tmp > file_1.tmp
+ 
+      # centre + variacio cortical suau de Radi1 a Radi2 (crust1 - crust2)
+	num_a=$(($crust1-$crust2))    # crust=a*x+b=[(crust1-crust2)/(Radi1-Radi2)]x+[crust1-Radi1*a]
+	nun_a_lit=$(($litos1-$litos2))    # litos=a*x+b=[(litos1-litos2)/(Radi1-Radi2)]x+[litos1-Radi1*a]
+	den_a=$(($Radi1-$Radi2)) 
+	a=$(($num_a/$den_a))
+	b=$(($crust1-$Radi1*$a))
+	a_litos=$(($nun_a_lit/$den_a))
+	b_litos=$(($litos1-$Radi1*$a_litos))
+	awk '{if($3<=Radi1){print $1,$2,$3,crust1,litos1} else 
+		 {if($3<=Radi2){print $1,$2,$3,a*$3+b,a_litos*$3+b_litos} else 
+			{print $1,$2,$3,crust2,litos2}} }' \
+	     Radi1=$Radi1 Radi2=$Radi2 crust1=$crust1 crust2=$crust2 a=$a b=$b litos1=$litos1 litos2=$litos2 a_litos=$a_litos b_litos=$b_litos file_xy_radi.tmp > file_1.tmp
+	
+      ## variacio cortical suau de Radi2 a Radi3 (crust2 -> crust3  o  crust2 -> crust4)
+	num_a3=$(($crust2-$crust3)) 
+	num_a4=$(($crust2-$crust4)) 
+	den_a=$(($Radi2-$Radi3)) 
+	a3=$(($num_a3/$den_a)) 
+	a4=$(($num_a4/$den_a)) 
+	
+	b3=$(($crust2-$Radi2*$a3)) 
+	b4=$(($crust2-$Radi2*$a4))
+	
+	awk '{if($3<=Radi2) {print $1,$2,$3,$4,$5} else
+		{if($3>Radi2 && $2<ycentre) {print $1,$2,$3,a3*$3+b3,$5} else
+			{print $1,$2,$3,a4*$3+b4,$5} }}' \
+	     Radi2=$Radi2 ycentre=$ycentre a3=$a3 b3=$b3 a4=$a4 b4=$b4 file_1.tmp > file_2.tmp
+
+      ## radi > Radi3 (crust3  o  crust4)
+	awk '{if($3<=Radi3) {print $1,$2,$4,$5} else
+		{if($3>Radi3 && $2<ycentre) {print $1,$2,crust3,$5} else
+			{print $1,$2,crust4,$5} }}' \
+	     Radi3=$Radi3 ycentre=$ycentre crust3=$crust3 crust4=$crust4 file_2.tmp > file_3.tmp
+	     
+	## random 
+	#awk '{if(NR<=nn){print $0} }' nn=$nn $file_random > file_random.tmp   # random
+	#paste file_3.tmp file_random.tmp > file_3_random.tmp
+	#awk '{print $1,$2,$3+$5,$4}' file_3_random.tmp >  file_4.tmp
+
+	cat file_3.tmp >> $file_outsL
+	
+fi
+if [ $type_thick -eq 5 ]
+then
+	crust1=40000
+	crust2=25000
+	Radi1=100000
+	Radi2=350000
+	echo "# orogen circular. " crust $crust1/$crust2 m > $file_outsL
+	echo $n   $m   $Dx  $Dy  $INPUT_DATA "(n m Dx Dy INPUT_DATA)" >> $file_outsL
+	xcentre=$((1000*$Xmax/2)) 
+	ycentre=$((1000*$Ymax/2)) 
+	awk '{print $1,$2,sqrt(($1-xcentre)*($1-xcentre)+($2-ycentre)*($2-ycentre)) }' \
+		xcentre=$xcentre ycentre=$ycentre file_out.tmp > file_xy_radi.tmp
+	awk '{if($3<=Radi1){print $1,$2,$3,crust1,75e3}else {print $1,$2,$3,crust2,75e3}}' \
+	     crust2=$crust2 crust1=$crust1 Radi1=$Radi1 file_xy_radi.tmp > file_1.tmp
+	### Pendent entre Radi1 i Radi2 i el gruix cortical crust1 i crust2   s=ar+b
+	num_a=$(($crust1-$crust2)) 
+	den_a=$(($Radi1-$Radi2)) 
+	a=$(($num_a/$den_a))
+	b=$(($crust1-$Radi1*$a))
+#	awk '{if($3>Radi1 && $3<Radi2){print $1,$2,a*$3+b,75e3}else {print $1,$2,$4,$5}}' \
+#	     Radi1=$Radi1 Radi2=$Radi2 a=$a b=$b file_1.tmp > file_2.tmp
+	awk '{if($3>Radi1 && $3<Radi2){print $1,$2,a*$3+b,$5}else {print $1,$2,$4,$5}}' \
+	     Radi1=$Radi1 Radi2=$Radi2 a=$a b=$b file_1.tmp > file_2.tmp
+	cat file_2.tmp >> $file_outsL
+fi
+
+if [ $type_thick -eq 6 ]
+then
+	echo "# Ridge, crustal thickness cnst, lithosphere vary " > $file_outsL
+	echo $n   $m   $Dx  $Dy  $INPUT_DATA "(n m Dx Dy INPUT_DATA)" >> $file_outsL
+	awk '{print $1,$2,5000,20000.0+8*$1/100}' file_out.tmp >> $file_outsL
+fi
+
+if [ $type_thick -eq 7 ]
+then
+	echo "# Lithosphere thickness variations " > $file_outsL
+	echo $n   $m   $Dx  $Dy  $INPUT_DATA "(n m Dx Dy INPUT_DATA)" >> $file_outsL
+	awk '{print $1,$2,30000,60000.0+8.58*$1/100}' file_out.tmp >> $file_outsL
+fi
+
+if [ $type_thick -eq 8 ]
+then
+	## $3<=Radi1: crust1,   Radi1<$3<Radi2: crust1->crust2,   $3>=Radi2: crust2
+
+	litos1=80000	
+	litos2=100000
+
+	crust1=60000	
+	crust2=20000
+	Radi1=110000		# crust=a*x+b
+	Radi2=240000
+	Radi1_litos=50000	# litos=a*x+b
+	Radi2_litos=100000
+	
+	echo "# Cordillera " crust: $crust2/$crust1/$crust2 m,  lithosphere: $litos2/$litos1/$litos2 m > $file_outsL
+	echo $n   $m   $Dx  $Dy  $INPUT_DATA "(n m Dx Dy INPUT_DATA)" >> $file_outsL
+
+	echo 1000*$Xmax/2 | bc -l | read xcentre
+	echo 1000*$Ymax/2 | bc -l | read ycentre
+	awk '{print $1,$2,sqrt(($2-ycentre)*($2-ycentre)) }' \
+		xcentre=$xcentre ycentre=$ycentre file_out.tmp > file_xy_radi.tmp
+ 
+      # centre + variacio cortical suau de Radi1 a Radi2 (crust1 - crust2)
+	echo $crust1-$crust2 | bc -l | read num_a   # crust=a*x+b=[(crust1-crust2)/(Radi1-Radi2)]x+[crust1-Radi1*a]
+	echo $litos1-$litos2 | bc -l | read nun_a_lit   # litos=a*x+b=[(litos1-litos2)/(Radi1-Radi2)]x+[litos1-Radi1*a]
+	echo $Radi1-$Radi2 | bc -l | read den_a
+	echo $num_a/$den_a | bc -l | read a
+	echo $crust1-$Radi1*$a | bc -l | read b
+	echo $nun_a_lit/$den_a | bc -l | read a_litos
+	echo $litos1-$Radi1*$a_litos | bc -l | read b_litos
+	awk '{if($3<=Radi1){print $1,$2,crust1,litos1} else 
+		 {if($3<=Radi2){print $1,$2,a*$3+b,a_litos*$3+b_litos} else 
+			{print $1,$2,crust2,litos2}} }' \
+	     Radi1=$Radi1 Radi2=$Radi2 crust1=$crust1 crust2=$crust2 a=$a b=$b litos1=$litos1 litos2=$litos2 a_litos=$a_litos b_litos=$b_litos file_xy_radi.tmp > file_1.tmp
+		     	
+        # Punta rodona
+	#echo 1000*$Xmax/2 | bc -l | read xcentre
+	#echo 1000*$Ymax/2 | bc -l | read ycentre
+	xtall=800000
+	awk '{print $1,$2,sqrt(($1-xtall)*($1-xtall)+($2-ycentre)*($2-ycentre)) }' \
+		xtall=$xtall ycentre=$ycentre file_out.tmp > file_xy_radi.tmp
+	awk '{if($3<=Radi1){print $1,$2,$3,crust1,litos1}else {print $1,$2,$3,crust2,litos2}}' \
+	     crust2=$crust2 crust1=$crust1 litos1=$litos1 litos2=$litos2 Radi1=$Radi1 file_xy_radi.tmp > file_1c.tmp
+
+	### Pendent radial entre Radi1 i Radi2 
+	#	del gruix cortical i litosferic (crust1/litos1 - crust2/litos2)  s=ar+b
+	awk '{if($3>Radi1 && $3<Radi2){print $1,$2,a*$3+b,a_litos*$3+b_litos} else \
+		{print $1,$2,$4,$5}}' \
+	     Radi1=$Radi1 Radi2=$Radi2 a=$a b=$b a_litos=$a_litos b_litos=$b_litos file_1c.tmp > file_2c.tmp
+	
+	# cercle + rectangle (crust and lithosphere coupled)
+	paste file_1.tmp file_2c.tmp > file_paste.tmp	
+	awk '{if($1<=xtall) {print $1,$2,$7,$8} else
+		{print $1,$2,$3,$4}}' xtall=$xtall file_paste.tmp > file_crust.tmp
+		
+        #cat file_crust.t >> $file_outsL
+## Lithosphere uncoupled
+	Radi1=$Radi1_litos
+	Radi2=$Radi2_litos
+	echo 1000*$Xmax/2 | bc -l | read xcentre
+	echo 1000*$Ymax/2 | bc -l | read ycentre
+	awk '{print $1,$2,sqrt(($2-ycentre)*($2-ycentre)) }' \
+		xcentre=$xcentre ycentre=$ycentre file_out.tmp > file_xy_radi.tmp
+      # centre + variacio cortical suau de Radi1 a Radi2 (crust1 - crust2)
+	echo $litos1-$litos2 | bc -l | read nun_a_lit   # litos=a*x+b=[(litos1-litos2)/(Radi1-Radi2)]x+[litos1-Radi1*a]
+	echo $Radi1-$Radi2 | bc -l | read den_a
+	echo $nun_a_lit/$den_a | bc -l | read a_litos
+	echo $litos1-$Radi1*$a_litos | bc -l | read b_litos
+	awk '{if($3<=Radi1){print $1,$2,litos1} else 
+		 {if($3<=Radi2){print $1,$2,a_litos*$3+b_litos} else 
+			{print $1,$2,litos2}} }' \
+	     Radi1=$Radi1 Radi2=$Radi2 litos1=$litos1 litos2=$litos2 a_litos=$a_litos b_litos=$b_litos file_xy_radi.tmp > file_1lit.tmp
+		     	
+        # Punta rodona
+	#echo 1000*$Xmax/2 | bc -l | read xcentre
+	#echo 1000*$Ymax/2 | bc -l | read ycentre
+	xtall=800000
+	awk '{print $1,$2,sqrt(($1-xtall)*($1-xtall)+($2-ycentre)*($2-ycentre)) }' \
+		xtall=$xtall ycentre=$ycentre file_out.tmp > file_xy_radi.tmp
+	awk '{if($3<=Radi1){print $1,$2,$3,litos1}else {print $1,$2,$3,litos2}}' \
+	     litos1=$litos1 litos2=$litos2 Radi1=$Radi1 file_xy_radi.tmp > file_1litos_c.tmp
+
+	### Pendent radial entre Radi1 i Radi2 
+	#	del gruix cortical i litosferic (crust1/litos1 - crust2/litos2)  s=ar+b
+	awk '{if($3>Radi1 && $3<Radi2){print $1,$2,a_litos*$3+b_litos} else \
+		{print $1,$2,$4}}' \
+	     Radi1=$Radi1 Radi2=$Radi2 a_litos=$a_litos b_litos=$b_litos file_1litos_c.tmp > file_2litos_c.tmp
+	
+	# cercle + rectangle (crust and lithosphere coupled)
+	paste file_1lit.tmp file_2litos_c.tmp > file_paste.tmp	
+	awk '{if($1<=xtall) {print $1,$2,$6} else
+		{print $1,$2,$3}}' xtall=$xtall file_paste.tmp > file_litos.tmp
+
+        paste file_crust.tmp file_litos.tmp > file_crust_litos.tmp
+	
+	awk '{print $1,$2,$3,$7}' file_crust_litos.tmp >> $file_outsL
+
+fi
+
+if [ $type_thick -eq 9 ]
+then
+	## $3<=Radi1: crust1,   Radi1<$3<Radi2: crust1->crust2,   $3>=Radi2: crust2
+
+	litos1=80000	
+	litos2=110000	 
+	litos_slab=280000	 
+		R1=90000
+		Rs1=180000	# lithospheric slab (entre Rs1 i Rs2)	
+		Rs2=310000
+		R2=400000	 
+
+	crust1=60000	
+	crust2=20000
+	Radi1=110000	# crust=a*x+b  and  litos=a*x+b
+	Radi2=200000
+	
+	#echo "# Alboran delamination + subduction " crust: $crust2/$crust1/$crust2 m,  lithosphere: $litos2/$litos1/$litos2 m > $file_outsL
+	echo "# Alboran delamination + subduction arc W" > $file_outsL
+	echo $n   $m   $Dx  $Dy  $INPUT_DATA "(n m Dx Dy INPUT_DATA)" >> $file_outsL
+
+	echo 1000*$Xmax/2 | bc -l | read xcentre
+	echo 1000*$Ymax/2 | bc -l | read ycentre
+	awk '{print $1,$2,sqrt(($2-ycentre)*($2-ycentre)) }' \
+		xcentre=$xcentre ycentre=$ycentre file_out.tmp > file_xy_radi.tmp
+ 
+      # centre + variacio cortical suau de Radi1 a Radi2 (crust1 - crust2)
+	echo $crust1-$crust2 | bc -l | read num_a   # crust=a*x+b=[(crust1-crust2)/(Radi1-Radi2)]x+[crust1-Radi1*a]
+	echo $litos1-$litos2 | bc -l | read nun_a_lit   # litos=a*x+b=[(litos1-litos2)/(Radi1-Radi2)]x+[litos1-Radi1*a]
+	echo $Radi1-$Radi2 | bc -l | read den_a
+	echo $num_a/$den_a | bc -l | read a
+	echo $crust1-$Radi1*$a | bc -l | read b
+	echo $nun_a_lit/$den_a | bc -l | read a_litos
+	echo $litos1-$Radi1*$a_litos | bc -l | read b_litos
+	awk '{if($3<=Radi1){print $1,$2,crust1,litos1} else 
+		 {if($3<=Radi2){print $1,$2,a*$3+b,a_litos*$3+b_litos} else 
+			{print $1,$2,crust2,litos2}} }' \
+	     Radi1=$Radi1 Radi2=$Radi2 crust1=$crust1 crust2=$crust2 a=$a b=$b litos1=$litos1 litos2=$litos2 a_litos=$a_litos b_litos=$b_litos file_xy_radi.tmp > file_1.tmp
+		     	
+        # Punta rodona
+	#echo 1000*$Xmax/2 | bc -l | read xcentre
+	#echo 1000*$Ymax/2 | bc -l | read ycentre
+	xtall=800000
+	awk '{print $1,$2,sqrt(($1-xtall)*($1-xtall)+($2-ycentre)*($2-ycentre)) }' \
+		xtall=$xtall ycentre=$ycentre file_out.tmp > file_xy_radi.tmp
+	awk '{if($3<=Radi1){print $1,$2,$3,crust1,litos1}else {print $1,$2,$3,crust2,litos2}}' \
+	     crust2=$crust2 crust1=$crust1 litos1=$litos1 litos2=$litos2 Radi1=$Radi1 file_xy_radi.tmp > file_1c.tmp
+
+	### Pendent radial entre Radi1 i Radi2 
+	#	del gruix cortical i litosferic (crust1/litos1 - crust2/litos2)  s=ar+b
+	awk '{if($3>Radi1 && $3<Radi2){print $1,$2,a*$3+b,a_litos*$3+b_litos} else \
+		{print $1,$2,$4,$5}}' \
+	     Radi1=$Radi1 Radi2=$Radi2 a=$a b=$b a_litos=$a_litos b_litos=$b_litos file_1c.tmp > file_2c.tmp
+	
+	# cercle + rectangle (crust and lithosphere coupled)
+	paste file_1.tmp file_2c.tmp > file_paste.tmp	
+	awk '{if($1<=xtall) {print $1,$2,$7,$8} else
+		{print $1,$2,$3,$4}}' xtall=$xtall file_paste.tmp > file_delam.tmp
+
+
+	### Lithospheric slab
+	### Pendent radial entre R1 i Rs1 
+	echo $litos1-$litos_slab | bc -l | read num_a
+	echo $R1-$Rs1 | bc -l | read den_a
+	echo $num_a/$den_a | bc -l | read a1
+	echo $litos1-$R1*$a1 | bc -l | read b1
+	### Pendent radial entre Rs2 i R2
+	echo $litos2-$litos_slab | bc -l | read num_a
+	echo $R2-$Rs2 | bc -l | read den_a
+	echo $num_a/$den_a | bc -l | read a2
+	echo $litos2-$R2*$a2 | bc -l | read b2
+	xtall=700000	# cercle
+	#ytall=800000	# cercle
+	awk '{print $1,$2,sqrt(($1-xtall)*($1-xtall)+($2-ycentre)*($2-ycentre)) }' \
+		xtall=$xtall ycentre=$ycentre file_out.tmp > file_xy_radi.tmp		
+	awk '{if($3<=R1){print $1,$2,0} else 
+		 {if($3<=Rs1){print $1,$2,a1*$3+b1} else 
+		 {if($3<=Rs2){print $1,$2,litos_slab} else
+		 {if($3<=R2){print $1,$2,a2*$3+b2} else
+			{print $1,$2,0}} }}}' \
+	     R1=$R1 Rs1=$Rs1 R2=$R2 Rs2=$Rs2 a1=$a1 b1=$b1 a2=$a2 b2=$b2 litos_slab=$litos_slab file_xy_radi.tmp > file_slab.tmp
+    	
+	# cercle + rectangle + lithospheric slab
+	paste file_delam.tmp file_slab.tmp > file_delam_slab.tmp	
+	awk '{if($1<=xtall && $7!=0 && $7>$4) {print $1,$2,$3,$7} else
+		{print $1,$2,$3,$4}}' xtall=$xtall file_delam_slab.tmp >> $file_outsL
+
+fi
+	
+if [ $type_thick -eq 10 ]
+then
+	litos1=80000	
+	litos2=100000	 
+	litos_slab_l=240000	# lithospheric slab lineal (entre Rs1 i Rs2)	 
+		R1_l=110000
+		Rs1_l=180000	
+		Rs2_l=280000
+		R2_l=380000	 
+
+	litos_slab_c=100000	# lithospheric slab circular (entre Rs1 i Rs2)	 
+		R1_c=110000
+		Rs1_c=180000	
+		Rs2_c=280000
+		R2_c=380000	 
+
+	crust1=60000	# $3<=Radi1: crust1,   Radi1<$3<Radi2: crust1->crust2,   $3>=Radi2: crust2
+	crust2=30000	# crust=a*x+b  and  litos=a*x+b
+	Radi1=110000
+	Radi2=200000
+	
+	#echo "# Alboran delamination + subduction " crust: $crust2/$crust1/$crust2 m,  lithosphere: $litos2/$litos1/$litos2 m > $file_outsL
+	echo "# Alboran delamination + subduction W-N-S" > $file_outsL
+	echo $n   $m   $Dx  $Dy  $INPUT_DATA "(n m Dx Dy INPUT_DATA)" >> $file_outsL
+
+	echo 1000*$Xmax/2 | bc -l | read xcentre
+	echo 1000*$Ymax/2 | bc -l | read ycentre
+	awk '{print $1,$2,sqrt(($2-ycentre)*($2-ycentre)) }' \
+		xcentre=$xcentre ycentre=$ycentre file_out.tmp > file_xy_radi_lin.tmp
+ 
+      # centre + variacio cortical suau de Radi1 a Radi2 (crust1 - crust2)
+	echo $crust1-$crust2 | bc -l | read num_a   # crust=a*x+b=[(crust1-crust2)/(Radi1-Radi2)]x+[crust1-Radi1*a]
+	echo $Radi1-$Radi2 | bc -l | read den_a
+	echo $num_a/$den_a | bc -l | read a
+	echo $crust1-$Radi1*$a | bc -l | read b
+	awk '{if($3<=Radi1){print $1,$2,crust1} else 
+		 {if($3<=Radi2){print $1,$2,a*$3+b} else 
+			{print $1,$2,crust2,litos2}} }' \
+	     Radi1=$Radi1 Radi2=$Radi2 crust1=$crust1 crust2=$crust2 a=$a b=$b file_xy_radi_lin.tmp > file_1.tmp
+		     	
+        # Punta rodona
+	xtall=800000
+	awk '{print $1,$2,sqrt(($1-xtall)*($1-xtall)+($2-ycentre)*($2-ycentre)) }' \
+		xtall=$xtall ycentre=$ycentre file_out.tmp > file_xy_radi_circ.tmp
+	awk '{if($3<=Radi1){print $1,$2,crust1} else 
+		 {if($3<=Radi2){print $1,$2,a*$3+b} else 
+			{print $1,$2,crust2}} }' \
+	     Radi1=$Radi1 Radi2=$Radi2 crust1=$crust1 crust2=$crust2 a=$a b=$b file_xy_radi_circ.tmp > file_1c.tmp
+	
+	# cercle + rectangle (crust)
+	paste file_1.tmp file_1c.tmp > file_crust_paste.tmp	
+	awk '{if($1<=xtall) {print $1,$2,$6} else
+		{print $1,$2,$3}}' xtall=$xtall file_crust_paste.tmp > file_crust.tmp
+
+
+	### Lithospheric slab lineal (N i S)
+	litos_slab=$litos_slab_l		 
+	R1=$R1_l
+	Rs1=$Rs1_l
+	Rs2=$Rs2_l
+	R2=$R2_l
+	### Pendent radial entre R1 i Rs1 
+	echo $litos1-$litos_slab | bc -l | read num_a
+	echo $R1-$Rs1 | bc -l | read den_a
+	echo $num_a/$den_a | bc -l | read a1
+	echo $litos1-$R1*$a1 | bc -l | read b1
+	### Pendent radial entre Rs2 i R2
+	echo $litos2-$litos_slab | bc -l | read num_a
+	echo $R2-$Rs2 | bc -l | read den_a
+	echo $num_a/$den_a | bc -l | read a2
+	echo $litos2-$R2*$a2 | bc -l | read b2
+	awk '{if($3<=R1){print $1,$2,litos1} else 
+		 {if($3<=Rs1){print $1,$2,a1*$3+b1} else 
+		 {if($3<=Rs2){print $1,$2,litos_slab} else
+		 {if($3<=R2){print $1,$2,a2*$3+b2} else
+			{print $1,$2,litos2}} }}}' \
+	     R1=$R1 Rs1=$Rs1 R2=$R2 Rs2=$Rs2 a1=$a1 b1=$b1 a2=$a2 b2=$b2 litos1=$litos1 litos2=$litos2 litos_slab=$litos_slab file_xy_radi_lin.tmp > file_litos_lin.tmp
+    	
+	### Lithospheric slab circular
+	litos_slab=$litos_slab_c		 
+	R1=$R1_c
+	Rs1=$Rs1_c
+	Rs2=$Rs2_c
+	R2=$R2_c 	
+	### Pendent radial entre R1 i Rs1 
+	echo $litos1-$litos_slab | bc -l | read num_a
+	echo $R1-$Rs1 | bc -l | read den_a
+	echo $num_a/$den_a | bc -l | read a1
+	echo $litos1-$R1*$a1 | bc -l | read b1
+	### Pendent radial entre Rs2 i R2
+	echo $litos2-$litos_slab | bc -l | read num_a
+	echo $R2-$Rs2 | bc -l | read den_a
+	echo $num_a/$den_a | bc -l | read a2
+	echo $litos2-$R2*$a2 | bc -l | read b2
+	awk '{if($3<=R1){print $1,$2,litos1} else 
+		 {if($3<=Rs1){print $1,$2,a1*$3+b1} else 
+		 {if($3<=Rs2){print $1,$2,litos_slab} else
+		 {if($3<=R2){print $1,$2,a2*$3+b2} else
+			{print $1,$2,litos2}} }}}' \
+	     R1=$R1 Rs1=$Rs1 R2=$R2 Rs2=$Rs2 a1=$a1 b1=$b1 a2=$a2 b2=$b2 litos1=$litos1 litos2=$litos2 litos_slab=$litos_slab file_xy_radi_circ.tmp > file_litos_circ.tmp
+    	
+
+	# cercle + rectangle (lithosphere)
+	paste file_litos_circ.tmp file_litos_lin.tmp > file_litos_paste.tmp	
+	awk '{if($1<=xtall) {print $1,$2,$3} else
+		{print $1,$2,$6}}' xtall=$xtall file_litos_paste.tmp > file_litos.tmp
+
+	# Paste crust + lithosphere
+	paste file_crust.tmp file_litos.tmp > file_crust_litos.tmp
+	awk '{print $1,$2,$3,$6}' file_crust_litos.tmp >> $file_outsL
+
+fi
+
+if [ $type_thick -eq 11 ]
+then
+	## $3<=Radi1: crust1,   Radi1<$3<Radi2: crust1->crust2,   $3>=Radi2: crust2
+
+	litos1=80000	
+	litos2=120000
+
+	crust1=60000	
+	crust2=20000
+	Radi1=110000		# crust=a*x+b
+	Radi2=240000
+	
+	echo "# Delamination " crust: $crust2/$crust1/$crust2 m,  lithosphere: $litos2/$litos1/$litos2 m > $file_outsL
+	echo $n   $m   $Dx  $Dy  $INPUT_DATA "(n m Dx Dy INPUT_DATA)" >> $file_outsL
+
+	echo 1000*$Xmax/2 | bc -l | read xcentre
+	echo 1000*$Ymax/2 | bc -l | read ycentre
+
+	echo $crust1-$crust2 | bc -l | read num_a   # crust=a*x+b=[(crust1-crust2)/(Radi1-Radi2)]x+[crust1-Radi1*a]
+	echo $litos1-$litos2 | bc -l | read nun_a_lit   # litos=a*x+b=[(litos1-litos2)/(Radi1-Radi2)]x+[litos1-Radi1*a]
+	echo $Radi1-$Radi2 | bc -l | read den_a
+	echo $num_a/$den_a | bc -l | read a
+	echo $crust1-$Radi1*$a | bc -l | read b
+	echo $nun_a_lit/$den_a | bc -l | read a_litos
+	echo $litos1-$Radi1*$a_litos | bc -l | read b_litos
+
+        # Circular with the center (xcentre, ycentre): crust and lithosphere
+
+	awk '{print $1,$2,sqrt(($1-xcentre)*($1-xcentre)+($2-ycentre)*($2-ycentre)) }' \
+		xcentre=$xcentre ycentre=$ycentre file_out.tmp > file_xy_radi.tmp
+	awk '{if($3<=Radi1){print $1,$2,crust1,litos1} else 
+		 {if($3<=Radi2){print $1,$2,a*$3+b,a_litos*$3+b_litos} else 
+			{print $1,$2,crust2,litos2}} }' \
+	     		Radi1=$Radi1 Radi2=$Radi2 crust1=$crust1 crust2=$crust2 \
+	     		a=$a b=$b litos1=$litos1 litos2=$litos2 a_litos=$a_litos \
+	    		b_litos=$b_litos file_xy_radi.tmp >> $file_outsL
+fi
+
+if [ $type_thick -eq 12 ]	## oval
+then
+	## $3<=Radi1: crust1,   Radi1<$3<Radi2: crust1->crust2,   $3>=Radi2: crust2
+
+	litos1=100000		#299981.4	
+	litos2=146013
+
+	crust1=70000	
+	crust2=35000
+	Radi1=110000		# crust=a*x+b and litos=a_litos*x+b_litos
+	Radi2=250000
+	
+	echo "# delaminacio ovalada " crust: $crust2/$crust1/$crust2 m,  lithosphere: $litos2/$litos1/$litos2 m  radis=$Radi1,$Radi2 > $file_outsL
+	echo $n   $m   $Dx  $Dy  $INPUT_DATA "(n m Dx Dy INPUT_DATA)" >> $file_outsL
+
+	echo 1000*$Xmax/2 | bc -l | read xcentre
+	echo 1000*$Ymax/2 | bc -l | read ycentre
+	echo $xcentre-600000 | bc -l | read xtall1
+	echo $xcentre+600000 | bc -l | read xtall2
+	
+	awk '{print $1,$2,sqrt(($2-ycentre)*($2-ycentre)) }' \
+		xcentre=$xcentre ycentre=$ycentre file_out.tmp > file_xy_radi.tmp
+ 
+      # centre + variacio cortical i litosferica suau de Radi1 a Radi2 (crust1 - crust2)
+	echo $crust1-$crust2 | bc -l | read num_a   # crust=a*x+b=[(crust1-crust2)/(Radi1-Radi2)]x+[crust1-Radi1*a]
+	echo $litos1-$litos2 | bc -l | read nun_a_lit   # litos=a*x+b=[(litos1-litos2)/(Radi1-Radi2)]x+[litos1-Radi1*a]
+	echo $Radi1-$Radi2 | bc -l | read den_a
+	echo $num_a/$den_a | bc -l | read a
+	echo $crust1-$Radi1*$a | bc -l | read b
+	echo $nun_a_lit/$den_a | bc -l | read a_litos
+	echo $litos1-$Radi1*$a_litos | bc -l | read b_litos
+	awk '{if($3<=Radi1){print $1,$2,crust1,litos1} else 
+		 {if($3<=Radi2){print $1,$2,a*$3+b,a_litos*$3+b_litos} else 
+			{print $1,$2,crust2,litos2}} }' \
+	     		Radi1=$Radi1 Radi2=$Radi2 crust1=$crust1 crust2=$crust2 \
+	     		a=$a b=$b litos1=$litos1 litos2=$litos2 a_litos=$a_litos \
+	     		b_litos=$b_litos file_xy_radi.tmp > file_1.tmp
+		     	
+        # Punta west rodona
+	awk '{print $1,$2,sqrt(($1-xtall1)*($1-xtall1)+($2-ycentre)*($2-ycentre)) }' \
+		xtall1=$xtall1 ycentre=$ycentre file_out.tmp > file_xy_radi.tmp
+	awk '{if($3<=Radi1){print $1,$2,crust1,litos1} else 
+		 {if($3<=Radi2){print $1,$2,a*$3+b,a_litos*$3+b_litos} else 
+			{print $1,$2,crust2,litos2}} }' \
+	     		Radi1=$Radi1 Radi2=$Radi2 crust1=$crust1 crust2=$crust2 \
+	     		a=$a b=$b litos1=$litos1 litos2=$litos2 a_litos=$a_litos \
+	     		b_litos=$b_litos file_xy_radi.tmp > file_W.tmp
+
+        # Punta est rodona
+	awk '{print $1,$2,sqrt(($1-xtall2)*($1-xtall2)+($2-ycentre)*($2-ycentre)) }' \
+		xtall2=$xtall2 ycentre=$ycentre file_out.tmp > file_xy_radi.tmp
+	awk '{if($3<=Radi1){print $1,$2,crust1,litos1} else 
+		 {if($3<=Radi2){print $1,$2,a*$3+b,a_litos*$3+b_litos} else 
+			{print $1,$2,crust2,litos2}} }' \
+	     		Radi1=$Radi1 Radi2=$Radi2 crust1=$crust1 crust2=$crust2 \
+	     		a=$a b=$b litos1=$litos1 litos2=$litos2 a_litos=$a_litos \
+	     		b_litos=$b_litos file_xy_radi.tmp > file_E.tmp
+	
+	# cercle W + rectangle + cercle E
+	paste file_W.tmp file_1.tmp file_E.tmp > file_paste.tmp	
+	awk '{if($1<=xtall1) {print $1,$2,$3,$4} else
+		{if($1<=xtall2){print $1,$2,$7,$8} else 
+		  {print $1,$2,$11,$12}}}' xtall1=$xtall1 xtall2=$xtall2 file_paste.tmp >> $file_outsL
+			
+fi
+
+
+if [ $type_thick -eq 13 ]	## continental colision
+then
+	## $3<=Radi1: crust1,   Radi1<$3<Radi2: crust1->crust2,   $3>=Radi2: crust2
+
+	litos1=160000	
+	litos2=160000
+
+	crust1=50000	
+	crust2=35000
+	Radi1=50000		# crust=a*x+b and litos=a_litos*x+b_litos
+	Radi2=125000
+	
+	echo "# continental colision" crust: $crust2/$crust1/$crust2 m,  lithosphere: $litos2/$litos1/$litos2 m  radis=$Radi1,$Radi2 > $file_outsL
+	echo $n   $m   $Dx  $Dy  $INPUT_DATA "(n m Dx Dy INPUT_DATA)" >> $file_outsL
+
+	echo 1000*$Xmax/2 | bc -l | read xcentre
+	#echo 1000*$Ymax/2 | bc -l | read ycentre
+	ycentre=300000
+	ample=200000
+	echo $xcentre-$ample | bc -l | read xtall1
+	echo $xcentre+$ample | bc -l | read xtall2
+	
+	awk '{print $1,$2,sqrt(($2-ycentre)*($2-ycentre)) }' \
+		xcentre=$xcentre ycentre=$ycentre file_out.tmp > file_xy_radi.tmp
+ 
+      # centre + variacio cortical i litosferica suau de Radi1 a Radi2 (crust1 - crust2)
+	echo $crust1-$crust2 | bc -l | read num_a   # crust=a*x+b=[(crust1-crust2)/(Radi1-Radi2)]x+[crust1-Radi1*a]
+	echo $litos1-$litos2 | bc -l | read nun_a_lit   # litos=a*x+b=[(litos1-litos2)/(Radi1-Radi2)]x+[litos1-Radi1*a]
+	echo $Radi1-$Radi2 | bc -l | read den_a
+	echo $num_a/$den_a | bc -l | read a
+	echo $crust1-$Radi1*$a | bc -l | read b
+	echo $nun_a_lit/$den_a | bc -l | read a_litos
+	echo $litos1-$Radi1*$a_litos | bc -l | read b_litos
+	awk '{if($3<=Radi1){print $1,$2,crust1,litos1} else 
+		 {if($3<=Radi2){print $1,$2,a*$3+b,a_litos*$3+b_litos} else 
+			{print $1,$2,crust2,litos2}} }' \
+	     		Radi1=$Radi1 Radi2=$Radi2 crust1=$crust1 crust2=$crust2 \
+	     		a=$a b=$b litos1=$litos1 litos2=$litos2 a_litos=$a_litos \
+	     		b_litos=$b_litos file_xy_radi.tmp > file_1.tmp
+		     	
+        # Punta west rodona
+	awk '{print $1,$2,sqrt(($1-xtall1)*($1-xtall1)+($2-ycentre)*($2-ycentre)) }' \
+		xtall1=$xtall1 ycentre=$ycentre file_out.tmp > file_xy_radi.tmp
+	awk '{if($3<=Radi1){print $1,$2,crust1,litos1} else 
+		 {if($3<=Radi2){print $1,$2,a*$3+b,a_litos*$3+b_litos} else 
+			{print $1,$2,crust2,litos2}} }' \
+	     		Radi1=$Radi1 Radi2=$Radi2 crust1=$crust1 crust2=$crust2 \
+	     		a=$a b=$b litos1=$litos1 litos2=$litos2 a_litos=$a_litos \
+	     		b_litos=$b_litos file_xy_radi.tmp > file_W.tmp
+
+        # Punta est rodona
+	awk '{print $1,$2,sqrt(($1-xtall2)*($1-xtall2)+($2-ycentre)*($2-ycentre)) }' \
+		xtall2=$xtall2 ycentre=$ycentre file_out.tmp > file_xy_radi.tmp
+	awk '{if($3<=Radi1){print $1,$2,crust1,litos1} else 
+		 {if($3<=Radi2){print $1,$2,a*$3+b,a_litos*$3+b_litos} else 
+			{print $1,$2,crust2,litos2}} }' \
+	     		Radi1=$Radi1 Radi2=$Radi2 crust1=$crust1 crust2=$crust2 \
+	     		a=$a b=$b litos1=$litos1 litos2=$litos2 a_litos=$a_litos \
+	     		b_litos=$b_litos file_xy_radi.tmp > file_E.tmp
+	
+	# cercle W + rectangle + cercle E
+	paste file_W.tmp file_1.tmp file_E.tmp > file_paste.tmp	
+	awk '{if($1<=xtall1) {print $1,$2,$3,$4} else
+		{if($1<=xtall2){print $1,$2,$7,$8} else 
+		  {print $1,$2,$11,$12}}}' xtall1=$xtall1 xtall2=$xtall2 file_paste.tmp > file_prisma.tmp
+			
+
+	# Indenter amb una estructura diferent (crato) x1<x<x2 i y<y1 ==> crust, litosfera
+	echo $xtall1-100000 | bc -l | read x1
+	echo $xtall2+100000 | bc -l | read x2
+	echo $ycentre-$Radi2/2-$Radi1/2 | bc -l | read y1
+	crust=45000
+	litos=250000
+	awk '{if($1>=x1 && $1<=x2 && $2<=y1) {print $1,$2,crust,litos} else
+		{print $1,$2,$3,$4}}' x1=$x1 x2=$x2 y1=$y1 crust=$crust litos=$litos file_prisma.tmp >> $file_outsL
+	
+	
+fi
+
+
+if [ $type_thick -eq 15 ]	## continental colision
+then
+	## $3<=Radi1: crust1,   Radi1<$3<Radi2: crust1->crust2,   $3>=Radi2: crust2
+
+	litos1=123000	
+	litos2=120000
+
+	crust1=40000	
+	crust2=28000
+	Radi1=70000		# crust=a*x+b and litos=a_litos*x+b_litos
+	Radi2=125000
+	
+	echo "# continental colision" crust: $crust2/$crust1/$crust2 m,  lithosphere: $litos2/$litos1/$litos2 m  radis=$Radi1,$Radi2 > $file_outsL
+	echo $n   $m   $Dx  $Dy  $INPUT_DATA "(n m Dx Dy INPUT_DATA)" >> $file_outsL
+
+	#echo 1000*$Xmax/2 | bc -l | read xcentre
+	#echo 1000*$Ymax/2 | bc -l | read ycentre
+	xcentre=640000
+	ycentre=225000
+	ample=150000
+	echo $xcentre-$ample | bc -l | read xtall1
+	echo $xcentre+$ample | bc -l | read xtall2
+	
+	awk '{print $1,$2,sqrt(($2-ycentre)*($2-ycentre)) }' \
+		xcentre=$xcentre ycentre=$ycentre file_out.tmp > file_xy_radi.tmp
+ 
+      # centre + variacio cortical i litosferica suau de Radi1 a Radi2 (crust1 - crust2)
+	echo $crust1-$crust2 | bc -l | read num_a   # crust=a*x+b=[(crust1-crust2)/(Radi1-Radi2)]x+[crust1-Radi1*a]
+	echo $litos1-$litos2 | bc -l | read nun_a_lit   # litos=a*x+b=[(litos1-litos2)/(Radi1-Radi2)]x+[litos1-Radi1*a]
+	echo $Radi1-$Radi2 | bc -l | read den_a
+	echo $num_a/$den_a | bc -l | read a
+	echo $crust1-$Radi1*$a | bc -l | read b
+	echo $nun_a_lit/$den_a | bc -l | read a_litos
+	echo $litos1-$Radi1*$a_litos | bc -l | read b_litos
+	awk '{if($3<=Radi1){print $1,$2,crust1,litos1} else 
+		 {if($3<=Radi2){print $1,$2,a*$3+b,a_litos*$3+b_litos} else 
+			{print $1,$2,crust2,litos2}} }' \
+	     		Radi1=$Radi1 Radi2=$Radi2 crust1=$crust1 crust2=$crust2 \
+	     		a=$a b=$b litos1=$litos1 litos2=$litos2 a_litos=$a_litos \
+	     		b_litos=$b_litos file_xy_radi.tmp > file_1.tmp
+		     	
+        # Punta west rodona
+	awk '{print $1,$2,sqrt(($1-xtall1)*($1-xtall1)+($2-ycentre)*($2-ycentre)) }' \
+		xtall1=$xtall1 ycentre=$ycentre file_out.tmp > file_xy_radi.tmp
+	awk '{if($3<=Radi1){print $1,$2,crust1,litos1} else 
+		 {if($3<=Radi2){print $1,$2,a*$3+b,a_litos*$3+b_litos} else 
+			{print $1,$2,crust2,litos2}} }' \
+	     		Radi1=$Radi1 Radi2=$Radi2 crust1=$crust1 crust2=$crust2 \
+	     		a=$a b=$b litos1=$litos1 litos2=$litos2 a_litos=$a_litos \
+	     		b_litos=$b_litos file_xy_radi.tmp > file_W.tmp
+
+        # Punta est rodona
+	awk '{print $1,$2,sqrt(($1-xtall2)*($1-xtall2)+($2-ycentre)*($2-ycentre)) }' \
+		xtall2=$xtall2 ycentre=$ycentre file_out.tmp > file_xy_radi.tmp
+	awk '{if($3<=Radi1){print $1,$2,crust1,litos1} else 
+		 {if($3<=Radi2){print $1,$2,a*$3+b,a_litos*$3+b_litos} else 
+			{print $1,$2,crust2,litos2}} }' \
+	     		Radi1=$Radi1 Radi2=$Radi2 crust1=$crust1 crust2=$crust2 \
+	     		a=$a b=$b litos1=$litos1 litos2=$litos2 a_litos=$a_litos \
+	     		b_litos=$b_litos file_xy_radi.tmp > file_E.tmp
+	
+	# cercle W + rectangle + cercle E
+	paste file_W.tmp file_1.tmp file_E.tmp > file_paste.tmp	
+	awk '{if($1<=xtall1) {print $1,$2,$3,$4} else
+		{if($1<=xtall2){print $1,$2,$7,$8} else 
+		  {print $1,$2,$11,$12}}}' xtall1=$xtall1 xtall2=$xtall2 file_paste.tmp > file_prisma.tmp
+			
+	cat file_prisma.tmp >> $file_outsL
+	
+	# Indenter amb una estructura diferent (crato) x1<x<x2 i y<y1 ==> crust, litosfera
+	#echo $xtall1-100000 | bc -l | read x1
+	#echo $xtall2+100000 | bc -l | read x2
+	#echo $ycentre-$Radi2/2-$Radi1/2 | bc -l | read y1
+	#crust=45000
+	#litos=250000
+	#awk '{if($1>=x1 && $1<=x2 && $2<=y1) {print $1,$2,crust,litos} else
+	#	{print $1,$2,$3,$4}}' x1=$x1 x2=$x2 y1=$y1 crust=$crust litos=$litos file_prisma.tmp >> $file_outsL
+	
+	
+fi
+
+if [ $type_thick -eq 16 ]
+then
+	litos1=80000
+	crust1=17000	
+	litos2=140000
+	crust2=32000	 
+	litos_slab_l=160000	# lithosphere and crust orogen lineal (entre Rs1 i Rs2, litos=a*x+b)
+	crust_slab_l=46000 
+		R1_l=200000	# Radis de la zona lineal per la crosta
+		Rs1_l=300000	
+		Rs2_l=370000
+		R2_l=520000	 
+
+		R1_l_litos=$R1_l	# Radis de la zona lineal per la litosfera
+		Rs1_l_litos=$Rs1_l
+		Rs2_l_litos=$Rs2_l
+		R2_l_litos=$R2_l	 
+
+	litos_slab_c=$litos_slab_l	# lithosphere and crust orogen circular (entre Rs1 i Rs2)	 
+	crust_slab_c=$crust_slab_l
+		R1_c=$R1_l
+		Rs1_c=$Rs1_l	
+		Rs2_c=$Rs2_l
+		R2_c=$R2_l
+		R1_c_litos=$R1_l_litos
+		Rs1_c_litos=$Rs1_l_litos	
+		Rs2_c_litos=$Rs2_l_litos
+		R2_c_litos=$R2_l_litos
+	
+	echo "# orogeno en arco, Alboran " > $file_outsL
+	echo $n   $m   $Dx  $Dy  $INPUT_DATA "(n m Dx Dy INPUT_DATA)" >> $file_outsL
+
+	echo 1000*$Xmax/2 | bc -l | read xcentre
+	echo 1000*$Ymax/2 | bc -l | read ycentre
+	awk '{print $1,$2,sqrt(($2-ycentre)*($2-ycentre)) }' \
+		xcentre=$xcentre ycentre=$ycentre file_out.tmp > file_xy_radi_lin.tmp
+        # Punta rodona
+	xtall=800000
+	awk '{print $1,$2,sqrt(($1-xtall)*($1-xtall)+($2-ycentre)*($2-ycentre)) }' \
+		xtall=$xtall ycentre=$ycentre file_out.tmp > file_xy_radi_circ.tmp		     	
+
+	### Crust and lithosphere: Part lineal (N i S)
+	##  Crust
+	crust_slab=$crust_slab_l		 
+	R1=$R1_l
+	Rs1=$Rs1_l
+	Rs2=$Rs2_l
+	R2=$R2_l
+	echo $R1-$Rs1 | bc -l | read den_a		## Pendent radial entre R1 i Rs1
+	echo $crust1-$crust_slab | bc -l | read num_a_c
+	echo $num_a_c/$den_a | bc -l | read a1_c
+	echo $crust1-$R1*$a1_c | bc -l | read b1_c
+
+	echo $R2-$Rs2 | bc -l | read den_a		## Pendent radial entre Rs2 i R2
+	echo $crust2-$crust_slab | bc -l | read num_a_c
+	echo $num_a_c/$den_a | bc -l | read a2_c
+	echo $crust2-$R2*$a2_c | bc -l | read b2_c
+
+	awk '{if($3<=R1){print $1,$2,crust1} else 
+		 {if($3<=Rs1){print $1,$2,a1_c*$3+b1_c} else 
+		 {if($3<=Rs2){print $1,$2,crust_slab} else
+		 {if($3<=R2){print $1,$2,a2_c*$3+b2_c} else
+			{print $1,$2,crust2}} }}}' \
+	     R1=$R1 Rs1=$Rs1 R2=$R2 Rs2=$Rs2 a1_c=$a1_c b1_c=$b1_c a2_c=$a2_c b2_c=$b2_c crust1=$crust1 crust2=$crust2 crust_slab=$crust_slab file_xy_radi_lin.tmp > file_crust_lin.tmp
+ 
+	##  lithosphere
+	litos_slab=$litos_slab_l
+	R1=$R1_l_litos
+	Rs1=$Rs1_l_litos
+	Rs2=$Rs2_l_litos
+	R2=$R2_l_litos
+	echo $R1-$Rs1 | bc -l | read den_a		## Pendent radial entre R1 i Rs1
+	echo $litos1-$litos_slab | bc -l | read num_a
+	echo $num_a/$den_a | bc -l | read a1
+	echo $litos1-$R1*$a1 | bc -l | read b1
+	echo $R2-$Rs2 | bc -l | read den_a		## Pendent radial entre Rs2 i R2 
+	echo $litos2-$litos_slab | bc -l | read num_a
+	echo $num_a/$den_a | bc -l | read a2
+	echo $litos2-$R2*$a2 | bc -l | read b2
+	awk '{if($3<=R1){print $1,$2,litos1} else 
+		 {if($3<=Rs1){print $1,$2,a1*$3+b1} else 
+		 {if($3<=Rs2){print $1,$2,litos_slab} else
+		 {if($3<=R2){print $1,$2,a2*$3+b2} else
+			{print $1,$2,litos2}} }}}' \
+	     R1=$R1 Rs1=$Rs1 R2=$R2 Rs2=$Rs2 a1=$a1 b1=$b1 a2=$a2 b2=$b2 litos1=$litos1 litos2=$litos2 litos_slab=$litos_slab file_xy_radi_lin.tmp > file_litos_lin.tmp
+
+	### Crust and lithosphere: Part circular
+        ## Crust
+	crust_slab=$crust_slab_c		 
+	R1=$R1_c
+	Rs1=$Rs1_c
+	Rs2=$Rs2_c
+	R2=$R2_c   	
+	echo $R1-$Rs1 | bc -l | read den_a		## Pendent radial entre R1 i Rs1
+	echo $crust1-$crust_slab | bc -l | read num_a_c
+	echo $num_a_c/$den_a | bc -l | read a1_c
+	echo $crust1-$R1*$a1_c | bc -l | read b1_c
+	echo $R2-$Rs2 | bc -l | read den_a		## Pendent radial entre Rs2 i R2
+	echo $crust2-$crust_slab | bc -l | read num_a_c
+	echo $num_a_c/$den_a | bc -l | read a2_c
+	echo $crust2-$R2*$a2_c | bc -l | read b2_c
+
+	awk '{if($3<=R1){print $1,$2,crust1} else 
+		 {if($3<=Rs1){print $1,$2,a1_c*$3+b1_c} else 
+		 {if($3<=Rs2){print $1,$2,crust_slab} else
+		 {if($3<=R2){print $1,$2,a2_c*$3+b2_c} else
+			{print $1,$2,crust2}} }}}' \
+	     R1=$R1 Rs1=$Rs1 R2=$R2 Rs2=$Rs2 a1_c=$a1_c b1_c=$b1_c a2_c=$a2_c b2_c=$b2_c crust1=$crust1 crust2=$crust2 crust_slab=$crust_slab file_xy_radi_circ.tmp > file_crust_circ.tmp
+ 
+	## Lithosphere
+	litos_slab=$litos_slab_c
+	R1=$R1_c_litos
+	Rs1=$Rs1_c_litos
+	Rs2=$Rs2_c_litos
+	R2=$R2_c_litos 	
+	echo $R1-$Rs1 | bc -l | read den_a		## Pendent radial entre R1 i Rs1
+	echo $litos1-$litos_slab | bc -l | read num_a
+	echo $num_a/$den_a | bc -l | read a1
+	echo $litos1-$R1*$a1 | bc -l | read b1
+	echo $R2-$Rs2 | bc -l | read den_a		## Pendent radial entre Rs2 i R2 
+	echo $litos2-$litos_slab | bc -l | read num_a
+	echo $num_a/$den_a | bc -l | read a2
+	echo $litos2-$R2*$a2 | bc -l | read b2
+	awk '{if($3<=R1){print $1,$2,litos1} else 
+		 {if($3<=Rs1){print $1,$2,a1*$3+b1} else 
+		 {if($3<=Rs2){print $1,$2,litos_slab} else
+		 {if($3<=R2){print $1,$2,a2*$3+b2} else
+			{print $1,$2,litos2}} }}}' \
+	     R1=$R1 Rs1=$Rs1 R2=$R2 Rs2=$Rs2 a1=$a1 b1=$b1 a2=$a2 b2=$b2 litos1=$litos1 litos2=$litos2 litos_slab=$litos_slab file_xy_radi_circ.tmp > file_litos_circ.tmp
+
+
+	# cercle + rectangle (crust and lithosphere)
+	paste file_crust_circ.tmp file_crust_lin.tmp > file_crust_paste.tmp	
+	awk '{if($1<=xtall) {print $1,$2,$3} else
+		{print $1,$2,$6}}' xtall=$xtall file_crust_paste.tmp > file_x_y_crust.tmp
+	paste file_litos_circ.tmp file_litos_lin.tmp > file_litos_paste.tmp	
+	awk '{if($1<=xtall) {print $3} else
+		{print $6}}' xtall=$xtall file_litos_paste.tmp > file_litos.tmp
+
+	# Paste crust + lithosphere
+	paste file_x_y_crust.tmp file_litos.tmp >> $file_outsL
+
+fi
+
+	
+echo Boundary condition:
+echo "		1 - Homogeni - Constant velocity (South)"
+echo "		2 - Not Homogeneous - Indenter (South)"
+echo "		3 - Not Homogeneous - Lineal Velocity (South)"
+echo "		4 - Not Homogeneous - Velocity calculated from a Euler Pole (South)"
+echo "		5 - Choose all boundaries"
+read tbc
+
+##########################   BOUNDARY CONDITIONS  ########################################
+####   ix, iy, ITBC, t1, t2
+##  ITBC=1	velocity fixed [Vx(m/s), Vy(m/s)]		->  vel_x=t1  and  vel_y=t2
+##  ITBC=12	stress xx and xy fixed (Est, West free)		-> tau_xx=t1  and  tau_xy=t2 
+##  ITBC=13	stress xx and yy fixed   			-> tau_xx=t1  and  tau_yy=t2 
+##  ITBC=23	stress xy and yy fixed (North, South free)	-> tau_xy=t1  and  tau_yy=t2 
+##  ITBC=4	free slip (vel normal=0, tau_xy=0)		-> don't use t1 and t2
+##  ITBC=5	velocity fixed [modul(mm/yr), azimut(degree)]	-> modul=t1  and  azimut=t2
+
+if [ $tbc -eq 1 ]
+then
+echo ' velocity from south to north, in the southern boundary (mm/yr)?'
+read vmmyear
+vaz=0
+#vmmyear=5  # mm/year
+
+awk '{print vmmyear/FACVEL }' vmmyear=$vmmyear FACVEL=$FACVEL \
+	$ffile1 | read velSI
+echo "# Boundary Conditions:  South v=" $vmmyear mm/year > $file_outBC
+
+iy=0	#  SOUTH
+awk '{if(NR<=n+1){print NR-1,iy,5,vmmyear,vaz,"          ",(NR-1)*Dxkm,iy*Dykm } }' \
+	vmmyear=$vmmyear vaz=$vaz n=$n m=$m ix=$ix iy=$iy Dxkm=$Dxkm Dykm=$Dykm $ffile1 >> $file_outBC
+#awk '{if(NR<=n+1){print (NR-1)*Dxkm,iy*Dykm } }' \
+#	n=$n m=$m ix=$ix iy=$iy Dxkm=$Dxkm Dykm=$Dykm $ffile1 > file.xy
+fi
+
+if [ $tbc -eq 2 ]
+then
+	iy=0		##--------  SOUTH  ------------------------
+
+##	Classic Indenter (cosinus**2) x1, x2, x3, x4
+        xcord1=3000001		#1410000  Tibet
+        xcord2=3055001		#1820000  Tibet
+	v1mmyear=0
+	v2mmyear=50	#Tibet
+        awk '{if(NR==1){printf "%6i", xcord1/Dx }}' xcord1=$xcord1 Dx=$Dx $ffile1 | read ix1
+        awk '{if(NR==1){printf "%6i", xcord2/Dx }}' xcord2=$xcord2 Dx=$Dx $ffile1 | read ix2
+#	v1=0.634e-10
+#	v2=1.268e-10
+  #	echo $xtall1/$Dx-100000/$Dx | bc -l | read ix1
+  #	echo $ix1+1 | bc -l | read ix2
+
+	ix4=$(($n-$ix1+1)) 
+	ix3=$(($n-$ix2+1)) 
+if [ $ix3 -lt  $ix2 ]
+then
+   echo "  ix2 is to large for the x number grid (n).   Should be ix2 <= n"
+   exit
+fi
+
+Dxkm=$(($Dx/1000)) 
+
+v1=$v1mmyear
+v2=$v2mmyear
+#awk '{print v1mmyear/FACVEL }' v1mmyear=$v1mmyear FACVEL=$FACVEL \
+#	$ffile1 | read v1
+#awk '{print v2mmyear/FACVEL }' v2mmyear=$v2mmyear FACVEL=$FACVEL \
+#	$ffile1 | read v2
+
+
+echo "# B.C., South indenter velocity, from  $v1mmyear to $v2mmyear mm/yr" > $file_outBC
+awk '{if(NR<=ix1 && NR<=n+1){print NR-1,iy,5,v1,0.0,"		", (NR-1)*Dxkm } }' n=$n ix1=$ix1 v1=$v1 iy=$iy Dxkm=$Dxkm $ffile1 >> $file_outBC
+
+awk '{print (PI/2)/(ix1-ix2),-((PI/2)/(ix1-ix2))*ix2  }' \
+	ix1=$ix1 ix2=$ix2 PI=$PI $ffile1 | read FACA FACB
+awk '{if(NR>ix1 && NR<ix2 && NR<=n+1){print NR-1,iy,5,v1+(v2-v1)*(cos(FACA*(NR-1)+FACB))*(cos(FACA*(NR-1)+FACB)),0.0,"		", (NR-1)*Dxkm } }' \
+	n=$n ix1=$ix1 ix2=$ix2 v2=$v2 v1=$v1 iy=$iy FACA=$FACA FACB=$FACB Dxkm=$Dxkm $ffile1 >> $file_outBC
+
+awk '{if(NR>=ix2 && NR<=ix3 && NR<=n+1){print NR-1,iy,5,v2,0.0,"		", (NR-1)*Dxkm } }' \
+	n=$n ix2=$ix2 ix3=$ix3 iy=$iy v1=$v1 v2=$v2 Dxkm=$Dxkm $ffile1 >> $file_outBC
+
+awk '{print (PI/2)/(ix4-ix3),-((PI/2)/(ix4-ix3))*ix3  }' \
+	ix3=$ix3 ix4=$ix4 PI=$PI $ffile1 | read FACA FACB
+awk '{if(NR>ix3 && NR<=ix4 && NR<=n+1){print NR-1,iy,5,v1+(v2-v1)*(cos(FACA*(NR-1)+FACB))*(cos(FACA*(NR-1)+FACB)),0.0,"		", (NR-1)*Dxkm } }' \
+	n=$n ix3=$ix3 ix4=$ix4 v1=$v1 v2=$v2 iy=$iy FACA=$FACA FACB=$FACB Dxkm=$Dxkm $ffile1 >> $file_outBC
+
+awk '{if(NR>ix4 && NR<=n+1){print NR-1,iy,5,v1,0.0,"		", (NR-1)*Dxkm } }' \
+	n=$n ix4=$ix4 v1=$v1 iy=$iy Dxkm=$Dxkm $ffile1 >> $file_outBC
+ 
+###  Canvi de l'angle de la velocitat
+#awk '{if(NR!=1){print $1,$2,$3,$4,$5} }' $file_outBC > file_ix_iy_t_mod.tmp
+#	azh1_graus=-30   # Degree
+#	azh2_graus=0
+#awk '{print (azh1_graus*PI)/180,(azh2_graus*PI)/180 }' \
+#	azh1_graus=$azh1_graus azh2_graus=$azh2_graus PI=$PI $ffile1 | read azh1 azh2
+#	ix1_az=0
+#	ix2_az=35
+#awk '{print (azh2-azh1)/(ix2_az-ix1_az), azh2-((azh2-azh1)/(ix2_az-ix1_az))*ix2_az }' \
+#	azh1=$azh1 azh2=$azh2 ix1_az=$ix1_az ix2_az=$ix2_az $ffile1 | read FACA FACB
+#awk '{if(NR>=ix1_az && NR<=ix2_az && NR<=n+1) {print $1,$2,$3,FACA*(NR-1)+FACB,$5} \
+#	else {print $1,$2,$3,$4,$5} }' n=$n ix1_az=$ix1_az ix2_az=$ix2_az \
+#	FACA=$FACA FACB=$FACB file_ix_iy_t_mod.tmp > file_ix_iy_t_az_mod.tmp
+#echo "# Boundary Conditions, velocity sud indenter, rotation from $azh1_graus to $azh2_graus " > $file_outBC
+#awk '{print $1,$2,$3,$5*sin($4),$5*cos($4) }' file_ix_iy_t_az_mod.tmp >> $file_outBC 
+fi
+		
+if [ $tbc -eq 3 ]
+then
+	iy=0	#  SOUTH
+	ix1=0
+	ix2=1
+	a=$(($n+1))
+	ix3=75	#$a
+	v1=16		# lineal variation v1/v2	
+	v2=16		#mm/yr
+	v3=22
+	Azimuth=0
+	
+	echo "# lineal variation:  $v1 - $v2 - $v3  mm/year " > $file_outBC
+awk '{print (v2-v1)/(ix2-ix1), v2-((v2-v1)/(ix2-ix1))*ix2 }' \
+	ix1=$ix1 ix2=$ix2 v1=$v1 v2=$v2 $ffile1 | read FACA FACB
+awk '{if(NR>ix1 && NR<=ix2 && NR<=n+1){print NR-1,iy,5,FACA*(NR-1)+FACB,Azimuth,(NR-1)*Dx/1e3 } }' \
+	n=$n ix1=$ix1 ix2=$ix2 iy=$iy Azimuth=$Azimuth FACA=$FACA FACB=$FACB Dx=$Dx $ffile1 >> $file_outBC
+
+awk '{print (v3-v2)/(ix3-ix2), v3-((v3-v2)/(ix3-ix2))*ix3 }' \
+	ix2=$ix2 ix3=$ix3 v2=$v2 v3=$v3 $ffile1 | read FACA FACB
+awk '{if(NR>ix2 && NR<=ix3 && NR<=n+1){print NR-1,iy,5,FACA*(NR-1)+FACB,Azimuth,(NR-1)*Dx/1e3 } }' \
+	n=$n ix2=$ix2 ix3=$ix3 iy=$iy Azimuth=$Azimuth FACA=$FACA FACB=$FACB Dx=$Dx $ffile1 >> $file_outBC
+##awk '{print (v1-v2)/(ix4-ix3), v1-((v1-v2)/(ix4-ix3))*ix4 }' \
+##	ix3=$ix3 ix4=$ix4 v1=$v1 v2=$v2 $ffile1 | read FACA FACB
+##awk '{if(NR>ix3 && NR<=ix4 && NR<=n+1){print NR-1,iy,1,0.0,FACA*(NR-1)+FACB } }' \
+##	n=$n ix1=$ix1 ix2=$ix2 ix3=$ix3 ix4=$ix4 iy=$iy FACA=$FACA FACB=$FACB $ffile1 >> $file_outBC
+
+fi
+
+if [ $tbc -eq 4 ]		## Euler Pole
+then
+iy=0	#  SOUTH
+echo $Dxkm $Dykm  > file_ixiy.tmp
+awk '{if(NR<=n+1){print NR-1,iy } }' n=$n iy=$iy $ffile1 >> file_ixiy.tmp
+### Input file: file_ixiy.tmp
+### Output file: file.out
+/home/ivone/jobs/Velocity_from_EulerPole.job
+#mv file.out $file_outBC
+#awk '{if($1=="#" || $6>830) {print $0} else {print $1,$2,$3,0,0,$6,$7 } }' file.out > $file_outBC
+awk '{if($1=="#" || $6>=0) {print $0} else {print $1,$2,$3,0,0,$6,$7 } }' file.out > $file_outBC
+rm -f file.out
+fi
+
+if [ $tbc -eq 5 ]		## Choose
+then
+iy=0	#  SOUTH
+echo "# Boundary Conditions."  > $file_outBC
+echo ' Conditions to the South boundary?'
+echo ' 			1-  Fixed (0mm/yr)'
+echo ' 			23- Free, lithostatic'
+echo ' 			4-  Free-slip'
+read BC_south
+awk '{if(NR<=n+1){print NR-1,iy,BC_south,0.0,0.0,"          ",(NR-1)*Dxkm,iy*Dykm } }' \
+	n=$n m=$m ix=$ix iy=$iy Dxkm=$Dxkm Dykm=$Dykm BC_south=$BC_south $ffile1 >> $file_outBC
+fi
+
+ix=$n	##--------  EST  ------------------------
+echo ' Conditions to the East boundary?'
+echo ' 			1-  Fixed (0mm/yr)'
+echo ' 			12- Free, lithostatic'
+echo ' 			4-  Free-slip'
+echo ' 			8-  Indenter'
+read BC_est
+
+if [ $BC_est -eq 8 ]		##	Classic Indenter (cosinus**2) x1, x2, x3, x4
+then
+        ycord1=374000	## Pannonian Basin Indenter	
+        ycord2=570000
+        ycord3=680000
+        ycord4=880000
+	v1mmyear=0
+	v2mmyear=20
+        awk '{if(NR==1){printf "%6i", ycord1/Dy }}' ycord1=$ycord1 Dy=$Dy $ffile1 | read iy1
+        awk '{if(NR==1){printf "%6i", ycord2/Dy }}' ycord2=$ycord2 Dy=$Dy $ffile1 | read iy2
+        awk '{if(NR==1){printf "%6i", ycord3/Dy }}' ycord3=$ycord3 Dy=$Dy $ffile1 | read iy3
+        awk '{if(NR==1){printf "%6i", ycord4/Dy }}' ycord4=$ycord4 Dy=$Dy $ffile1 | read iy4
+	#iy4=$(($m-$iy1+1)) 	# Symetric
+	#iy3=$(($m-$iy2+1)) 
+
+Dykm=$(($Dy/1000)) 
+v1=$v1mmyear
+v2=$v2mmyear
+
+awk '{if(NR<=iy1 && NR<m){print ix,NR,4,v1,90,"		", NR*Dykm } }' m=$m iy1=$iy1 v1=$v1 ix=$ix Dykm=$Dykm $ffile1 >> $file_outBC
+
+awk '{print (PI/2)/(iy1-iy2),-((PI/2)/(iy1-iy2))*iy2  }' \
+	iy1=$iy1 iy2=$iy2 PI=$PI $ffile1 | read FACA FACB
+awk '{if(NR>iy1 && NR<iy2 && NR<m){print ix,NR,5,v1+(v2-v1)*(cos(FACA*NR+FACB))*(cos(FACA*NR+FACB)),90,"		", NR*Dykm } }' \
+	m=$m iy1=$iy1 iy2=$iy2 v2=$v2 v1=$v1 ix=$ix FACA=$FACA FACB=$FACB Dykm=$Dykm $ffile1 >> $file_outBC
+awk '{if(NR>=iy2 && NR<=iy3 && NR<m){print ix,NR,5,v2,90,"		", NR*Dykm } }' \
+	m=$m iy2=$iy2 iy3=$iy3 ix=$ix v1=$v1 v2=$v2 Dykm=$Dykm $ffile1 >> $file_outBC
+awk '{print (PI/2)/(iy4-iy3),-((PI/2)/(iy4-iy3))*iy3  }' \
+	iy3=$iy3 iy4=$iy4 PI=$PI $ffile1 | read FACA FACB
+awk '{if(NR>iy3 && NR<=iy4 && NR<m){print ix,NR,5,v1+(v2-v1)*(cos(FACA*NR+FACB))*(cos(FACA*NR+FACB)),90,"		", NR*Dykm } }' \
+	m=$m iy3=$iy3 iy4=$iy4 v1=$v1 v2=$v2 ix=$ix FACA=$FACA FACB=$FACB Dykm=$Dykm $ffile1 >> $file_outBC
+
+awk '{if(NR>iy4 && NR<m){print ix,NR,4,v1,90,"		", NR*Dykm } }' \
+	m=$m iy4=$iy4 v1=$v1 ix=$ix Dykm=$Dykm $ffile1 >> $file_outBC
+ 
+
+else
+awk '{if(NR<m){print ix,NR,BC_est,0.0,0.0,"           ",NR*Dykm } }' \
+	n=$n m=$m ix=$ix iy=$iy Dxkm=$Dxkm Dykm=$Dykm BC_est=$BC_est $ffile1 >> $file_outBC
+
+fi
+
+
+iy=$m	##--------  NORTH  ------------------------
+echo ' Conditions to the North boundary?'
+echo ' 			1-  Fixed (0mm/yr)'
+echo ' 			23- Free, lithostatic'
+echo ' 			4-  Free-slip'
+read BC_north
+awk '{if(NR<=n+1){print n-NR+1,iy,BC_north,0.0,0.0 } }' n=$n m=$m ix=$ix iy=$iy BC_north=$BC_north $ffile1 >> $file_outBC
+
+ix=0	##--------  WEST  ------------------------
+echo ' Conditions to the West boundary?'
+echo ' 			1-  Fixed (0mm/yr)'
+echo ' 			12- Free, lithostatic'
+echo ' 			4-  Free-slip'
+read BC_west
+awk '{if(NR<m){print ix,m-NR,BC_west,0.0,0.0 } }' n=$n m=$m ix=$ix iy=$iy BC_west=$BC_west $ffile1 >> $file_outBC
+##--------------------------------
+
+fi
+
+########   GRAPHICS  #########################
+scale1Fig=0.003		# 0.02
+scale3Fig=0.0015
+
+if [ $op -eq 2 ]
+then
+	echo "File with the crustal and lithospheric thicknesses?"
+	read file_outsL
+	echo "File with the boundary conditions?"
+	read file_outBC
+awk '{if(NR==2){print $1, $2, $3, $4} }' $file_outsL | read  n m Dx Dy
+Xmax=$(($n*$Dx/1000))
+Ymax=$(($m*$Dy/1000)) 
+Dxkm=$(($Dx/1000))
+Dykm=$(($Dy/1000))
+
+fi
+
+awk '{if(NR==1){print $0} }' $file_outsL | read title_grid
+regio=0/$Xmax/0/$Ymax
+echo n = $n,  m = $m,  Dx = $Dx m,  Dy = $Dy m
+echo regio=0/$Xmax/0/$Ymax
+read ok
+awk '{if(NR>2){print $1/1e3,$2/1e3,$3/1e3,$4/1e3} }' $file_outsL > filexysLsed.tmp 
+
+#### Grid with the numbers
+#awk '{print $1,$2+1,4,0,0,2,$3 }' filexysLsed.tmp > file_text.tmp 
+#awk '{print $1,$2-7,4,0,0,2,$4 }' filexysLsed.tmp >> file_text.tmp 
+#psxy filexysLsed.tmp -Ba100f200g250:"longitud (km)":/a100f200g250:"latitud (km)":EWSN \
+#	-R$regio -Jx$scale1Fig -Sc0.04 -K -N -V > $FILEPS
+#pstext file_text.tmp -R -Jx -O -N -V >> $FILEPS
+#rm -f file_text.tmp
+#gv -portrait -a4 -magstep -3 $FILEPS &
+
+## thicknesses
+
+awk '{print $1,$2,$3 }' filexysLsed.tmp > file_xyz.tmp 					### Crustal thickness
+psbasemap -P -Y21 -R$regio -Jx$scale3Fig -Ba200/a200WNEs -K -V > $FILEPS_th
+xyz2grd file_xyz.tmp -R -Gfile_grd.tmp -I$Dxkm/$Dykm
+grd2cpt file_grd.tmp > file_palette_cpt.tmp
+grdimage file_grd.tmp -Jx -R -O -K -Cfile_palette_cpt.tmp -V >> $FILEPS_th
+psscale -Cfile_palette_cpt.tmp -L -D12/2.6/5/.3 -B:" crust km ": -O -K -V >> $FILEPS_th
+rm -f file_*.tmp
+
+awk '{print $1,$2,$4 }' filexysLsed.tmp > file_xyz.tmp  				### Lithosphere thickness
+psbasemap -Y-9 -R -Jx -Ba200/a200WnEs -K -O -V >> $FILEPS_th
+xyz2grd file_xyz.tmp -R -Gfile_grd.tmp -I$Dxkm/$Dykm
+grd2cpt file_grd.tmp > file_palette_cpt.tmp
+grdimage file_grd.tmp -Jx -R -O -K -Cfile_palette_cpt.tmp -V >> $FILEPS_th
+psscale -Cfile_palette_cpt.tmp -L -D12/2.6/5/.3 -B:"lithosphere  km ": -O -K -V >> $FILEPS_th
+rm -f file_*.tmp
+
+#awk '{print $1,$2,$5 }' filexysLsed.tmp > file_xyz.tmp   				### Sediment thickness
+#psbasemap -Y-9 -R -Jx -Ba200/a200WnES -K -O -V >> $FILEPS_th
+#xyz2grd file_xyz.tmp -R -Gfile_grd.tmp -I$Dxkm/$Dykm
+#grd2cpt file_grd.tmp > file_palette_cpt.tmp
+#grdimage file_grd.tmp -Jx -R -O -K -Cfile_palette_cpt.tmp -V >> $FILEPS_th
+#psscale -Cfile_palette_cpt.tmp -L -D12/2.6/5/.3 -B:" sediment km ": -O -K -V >> $FILEPS_th
+
+rm -f file_*.tmp filexysLsed.tmp
+
+pstext -R -Jx -O -N -V <<END>> $FILEPS_th
+2500 -500 12 0 9 3 Grid n=$n x m=$m
+2050 -780 12 0 9 2 $title_grid
+#500 1040 11 0 9 2 $DIR
+END
+evince $FILEPS_th &
+
+
+
+####  GRAPHIC BOUNDARY CONDITIONS
+escvel=7		#Tibet: 5
+awk '{if($1!="#"){print $0} }' $file_outBC > file_0.tmp 
+#awk '{print $1*Dx/1e3,$2*Dy/1e3 }' Dx=$Dx Dy=$Dy file_0.tmp > Boundary.xy 
+wc file_0.tmp | read nboundary a b c 
+awk '{print 2*(n+1)+2*(m-1) }' n=$n m=$m $file_outBC | read nbound_calc
+
+awk '{if(nboundary!=nbound_calc){print "FILE OF THE BOUNDARY CONDITIONS IS NOT CORRECT"} \
+	else {print "Boundary Conditions"} }' nboundary=$nboundary nbound_calc=$nbound_calc $file_outBC | read text_error
+
+awk '{if($1=="#"){print $0} }' $file_outBC | read title
+
+awk '{if(($3==1) && ($4!=0 || $5!=0)){print $1*Dx/1e3,$2*Dy/1e3,(180/3.1416)*atan2($5,$4),\
+	((sqrt($4*$4+$5*$5))*FACVEL)/escvel} }' FACVEL=$FACVEL escvel=$escvel \
+	Dx=$Dx Dy=$Dy file_0.tmp > file_vel.tmp
+awk '{if($3==5 && $4!=0){print $1*Dx/1e3,$2*Dy/1e3,90-$5,$4/escvel} }' \
+	escvel=$escvel Dx=$Dx Dy=$Dy file_0.tmp >> file_vel.tmp
+cat <<END >>file_vel.tmp
+10 -350 0 2
+END
+awk '{print escvel*2 }' escvel=$escvel FACVEL=$FACVEL $ffile1 | read tic_facvel
+		
+psxy file_vel.tmp -Y4 -X3 -Ba1000f1000:" km ":/a250f500:" km ":EWSn \
+	 -R$regio -Jx$scale1Fig -Sv.1/0.45/0.15n0.4 -G100 -W.5/120 -N -K -V > $PS_BC
+
+awk '{if($3==1 && $4==0 && $5==0){print $1*Dx/1e3,$2*Dy/1e3} }' \
+	Dx=$Dx Dy=$Dy file_0.tmp > file_vel0.tmp
+awk '{if($3==5 && $4==0){print $1*Dx/1e3,$2*Dy/1e3} }' \
+	Dx=$Dx Dy=$Dy file_0.tmp >> file_vel0.tmp
+
+awk '{if($2==Ymax){print $1,$2} }' Ymax=$Ymax file_vel0.tmp > file_vel0_N.tmp
+awk '{if($2!=Ymax){print $1,$2} }' Ymax=$Ymax file_vel0.tmp > file_vel0_ESW.tmp
+psxy file_vel0_ESW.tmp -R -Jx -St0.3 -W0.4/0 -G0/0/220 -O -K -N -V >> $PS_BC
+psxy file_vel0_N.tmp -R -Jx -Si0.3 -W0.4/0 -G0/0/220 -O -K -N -V >> $PS_BC
+
+awk '{if($3==4){print $1*Dx/1e3,$2*Dy/1e3} }' Dx=$Dx Dy=$Dy file_0.tmp > file_freeslip.tmp
+psxy file_freeslip.tmp -R -Jx -Sc0.25 -W0.4/0 -G250/0/0 -O -K -N -V >> $PS_BC
+
+###  ITBC=12 ==> stress xx and xy fixed
+awk '{if($3==12 && $1==0){print $1*Dx/1e3,$2*Dy/1e3,7,0,9,3,"@~t@~@-xx@-="$4,"@~t@~@-xy@-="$5,"FREE" } }' \
+	Dx=$Dx Dy=$Dy file_0.tmp > file_text12_free.tmp
+awk '{if($3==12 && $1==n){print $1*Dx/1e3,$2*Dy/1e3,7,0,9,1,"@~t@~@-xx@-="$4,"@~t@~@-xy@-="$5,"FREE" } }' \
+	Dx=$Dx Dy=$Dy n=$n file_0.tmp >> file_text12_free.tmp
+awk '{if($3==12 && $2==m){print $1*Dx/1e3,$2*Dy/1e3,7,90,9,1,"@~t@~@-xx@-="$4,"@~t@~@-xy@-="$5 } }' \
+	Dx=$Dx Dy=$Dy m=$m file_0.tmp > file_text12.tmp
+awk '{if($3==12 && $2==0){print $1*Dx/1e3,$2*Dy/1e3,7,90,9,3,"@~t@~@-xx@-="$4,"@~t@~@-xy@-="$5 } }' \
+	Dx=$Dx Dy=$Dy m=$m file_0.tmp >> file_text12.tmp
+pstext file_text12_free.tmp -R -Jx -G0/100/0 -O -K -N -V >> $PS_BC
+pstext file_text12.tmp -R -Jx -O -K -N -V >> $PS_BC
+
+###  ITBC=13 ==> stress xy and yy fixed
+awk '{if($3==13 && $1==0){print $1*Dx/1e3,$2*Dy/1e3,7,0,9,3,"@~t@~@-xx@-="$4,"@~t@~@-yy@-="$5} }' \
+	Dx=$Dx Dy=$Dy file_0.tmp > file_text13.tmp
+awk '{if($3==13 && $1==n){print $1*Dx/1e3,$2*Dy/1e3,7,0,9,1,"@~t@~@-xx@-="$4,"@~t@~@-yy@-="$5} }' \
+	Dx=$Dx Dy=$Dy n=$n file_0.tmp >> file_text13.tmp
+awk '{if($3==13 && $2==m){print $1*Dx/1e3,$2*Dy/1e3,7,90,9,1,"@~t@~@-xx@-="$4,"@~t@~@-yy@-="$5} }' \
+	Dx=$Dx Dy=$Dy m=$m file_0.tmp >> file_text13.tmp
+awk '{if($3==13 && $2==0){print $1*Dx/1e3,$2*Dy/1e3,7,90,9,3,"@~t@~@-xx@-="$4,"@~t@~@-yy@-="$5} }' \
+	Dx=$Dx Dy=$Dy m=$m file_0.tmp >> file_text13.tmp
+pstext file_text13.tmp -R -Jx -O -K -N -V >> $PS_BC
+
+###  ITBC=23 ==> stress xy and yy fixed
+awk '{if($3==23 && $1==0){print $1*Dx/1e3,$2*Dy/1e3,7,0,9,3,"@~t@~@-xy@-="$4,"@~t@~@-yy@-="$5} }' \
+	Dx=$Dx Dy=$Dy file_0.tmp > file_text23.tmp
+awk '{if($3==23 && $1==n){print $1*Dx/1e3,$2*Dy/1e3,7,0,9,1,"@~t@~@-xy@-="$4,"@~t@~@-yy@-="$5} }' \
+	Dx=$Dx Dy=$Dy n=$n file_0.tmp >> file_text23.tmp
+awk '{if($3==23 && $2==m){print $1*Dx/1e3,$2*Dy/1e3,7,90,9,1,"@~t@~@-xy@-="$4,"@~t@~@-yy@-="$5,"FREE"} }' \
+	Dx=$Dx Dy=$Dy m=$m file_0.tmp > file_text23_free.tmp
+awk '{if($3==23 && $2==0){print $1*Dx/1e3,$2*Dy/1e3,7,90,9,3,"@~t@~@-xy@-="$4,"@~t@~@-yy@-="$5,"FREE"} }' \
+	Dx=$Dx Dy=$Dy m=$m file_0.tmp >> file_text23_free.tmp
+pstext file_text23.tmp -R -Jx -O -K -N -V >> $PS_BC
+pstext file_text23_free.tmp -R -Jx -G0/100/0 -O -K -N -V >> $PS_BC
+
+
+pstext -R -Jx -O -N -V <<END>> $PS_BC
+1 -33 11 0 9 0 $tic_facvel mm/year
+110 -33 12 0 9 3 Grid n=$n x m=$m
+110 -37 12 0 9 3 Nodes to the boundary: $nboundary
+20 70 14 0 10 1 $text_error
+85 -43 12 0 9 2 $title
+0 140 11 0 9 0 $DIR
+0 130 11 0 9 0 $file_outBC
+END
+
+rm -f file_*.tmp
+
+evince $PS_BC &

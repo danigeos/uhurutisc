@@ -1,0 +1,143 @@
+#!/bin/ksh
+
+### input
+filegrd1=/usr/users/ivone/Azores_Argelia/HeatFlow_elevation/ETOPO5_Azores_Argelia.grd	# Elevation
+file2=/usr/users/ivone/Azores_Argelia/HeatFlow_elevation/HF_Atlantic_Medit.ll		# Heat Flow
+file_dig=/usr/users/ivone/Azores_Argelia/HeatFlow_elevation/age_seafloor_linies.dig	# Age sea floor
+### output
+FILEPS=topo_Qsup.ps			
+fileout3=elev_Qsup.ll
+echo
+echo "  INPUT FILES :"  
+echo " 	 " $filegrd1 
+#echo " 	 " $filegrd2	
+echo " 	 " $file2	
+echo
+echo "  OUTPUT FILES :"  
+echo " 	 " $fileout3, $FILEPS
+echo
+echo "Van be aquests files? (1=si, 2=no)"
+read resposta
+if [ $resposta  -eq 2 ] 
+then
+	exit
+fi
+
+rm $fileout3 $FILEPS
+###########################
+
+xmin=-29
+xmax=3
+ymin=30
+ymax=45
+regio=$xmin/$xmax/$ymin/$ymax
+dx=0.1
+dy=0.1
+
+echo "  "
+echo " ************************************************************ "
+echo "  " DOMINI:  $xmin E, $xmax E   i   $ymin N, $ymax N 
+echo "  " DISCRETITZACIO en longitud i latitud: $dx, $dy  graus
+echo " ************************************************************ "
+echo "  "
+#####   Elevacio   ######
+echo " ELEVATION "
+#grdfilter $filegrd1 -D1 -Fb100 -Gfile_grd.tmp -V
+#text="$filegrd1  + filtrat box100 "
+#echo $text
+grdmath $filegrd1 1000 DIV = file_kmgrd.tmp
+grdsample file_kmgrd.tmp -Gfile_grdsample.tmp -R$regio -I$dx/$dy -V
+grd2xyz file_grdsample.tmp -R$regio -V > file_ll.tmp
+#sort -k 2,2n -k 1,1n -o file_llord.tmp file_ll.tmp
+
+awk '{print $1,$2,$3*1e3 }' file_ll.tmp > elevacio.tmp
+
+####### palette color ########
+cat <<END>file_palette_cpt.tmp
+-7     0    0  100    -5     0   27  200
+-5     0   27  200    -3     0  100  220	
+-3     0  100  220    -2     0  150  240	
+-2     0  150  220    -1     0  200  240	
+-1     0  200  240     -0.500     0  220  255	
+-0.5     0  220  255        0   120  255  255	
+0    75  180  155      0.100    75  200  125	
+0.100    75  200  125      0.200    75  235   75	
+0.200    75  235   75      0.500   125  255   75	
+0.500   150  255   75     1   175  255   75	
+1   200  255   75     1.5   200  200   75  
+1.5   180  160  100     2   180  160  100	
+2   255  255  255     3.5   255  255  255	
+END
+psbasemap -R$regio -P -Y18.5 -Jm0.35 -Ba5/a5WSEn -K -V > $FILEPS
+#grdimage file_grdsample.tmp -Jm -R -O -K -Cfile_palette_cpt.tmp -V >> $FILEPS
+grdimage file_kmgrd.tmp -Jm -R -O -K -Cfile_palette_cpt.tmp -V >> $FILEPS
+pscoast -R -Jm -Dl -A4 -W3/0 -K -O -V >> $FILEPS
+grdcontour file_grdsample.tmp -Ba -C0.5 -A1f10 -G2.5/8 -W2/255 -O -K -Jm -R -V >> $FILEPS
+psscale -Cfile_palette_cpt.tmp -L -D8/-1.1/16/.4h -B:"  ": -O -K -V >> $FILEPS
+pstext -R -Jm -O -K -N -V <<END>> $FILEPS
+-12 48.5 14 0 1 2 ELEVATION (km)
+-12 47 11 0 4 2 ( $text )
+END
+rm file_*.tmp
+
+
+#####   Flux de calor   ######
+echo " HEAT FLOW "
+#grdfilter $filegrd2 -D1 -Fb200 -Gfile_grd.tmp -V
+#text="$filegrd2  + filtrat box200 "
+
+awk '{print $1,$2,$3 }' $file2  > file_llQ1.tmp
+awk '{if($1!=">" && $1!="#") {print $1,$2,473.02/sqrt($3) } }' $file_dig  >> file_llQ1.tmp
+awk '{ if($3>45) {print $1,$2,$3} else {print $1,$2,45} }' file_llQ1.tmp > file_llQ2.tmp
+awk '{ if($3<200) {print $1,$2,$3} else {print $1,$2,200} }' file_llQ2.tmp > file_llQ.tmp
+blockmedian file_llQ.tmp  -R$regio -I1 > file_bloc.tmp
+surface file_bloc.tmp -R -Gfile_grd.tmp -I1 -V
+#xyz2grd file_bloc.tmp -Gfile_grd.tmp -R -I0.2
+text=" $file2 "
+echo $text
+
+grdsample file_grd.tmp -Gfile_grdsample.tmp -R$regio -I$dx/$dy -V
+grd2xyz file_grdsample.tmp -R$regio -V > file_ll.tmp
+
+#awk '{print $1,$2,$3 }' file_ll.tmp > Qsup.tmp
+#awk '{ if($3>45) {print $3/1e3} else {print 0.045} }' file_ll.tmp >> $fileout2
+awk '{ print $1,$2,$3 }' file_ll.tmp > Qsup.tmp
+
+##  Paleta color #####
+cat <<END>file_palette_cpt.tmp
+20	0	0	255	40	0	100	255
+40	0	100	255	50	0	255	255
+#40	0	200	255	50	0	255	255
+50	0	255	255	60	150	255	0
+60	150	255	0	70	255	255	0
+70	255	255	0	80	255	200	0
+80	255	200	0	90	255	150	0
+90	255	150	0	100	255	125	0
+100	255	125	0	110	255	100	0
+110	255	100	0	120	255	50	0
+120	255	50	0	250	255	0	0
+END
+psbasemap -R$regio -Y-14 -Jm -Ba5/a5WSEn -K -O -V >> $FILEPS
+grdimage file_grdsample.tmp -Jm -R -O -K -Cfile_palette_cpt.tmp -V >> $FILEPS
+pscoast -R -Jm -Dl -A4 -W3/0 -K -O -V >> $FILEPS
+grdcontour file_grdsample.tmp -Ba -C10 -A20f10 -G2.5/8 -W2/255 -O -K -Jm -R -V >> $FILEPS
+psscale -Cfile_palette_cpt.tmp -L -D8/-1.1/13/.4h -B:"  ": -O -K -V >> $FILEPS
+pstext -R -Jm -O -N -V <<END>> $FILEPS
+-12 48.5 14 0 1 2  HEAT FLOW (mW/m@+2@+)
+-12 47 11 0 4 2 ( $text )
+END
+
+paste Qsup.tmp elevacio.tmp > file_ll_Qsup_e.tmp
+sort -k 2,2n -k 1,1n -o file_ll_Qsup_e_ord.tmp file_ll_Qsup_e.tmp
+awk '{if ($1==$4 && $2==$5) {print $1,$2,$6,$3/1e3} 
+	else
+	{print " file is not arranged"}}' file_ll_Qsup_e_ord.tmp > $fileout3
+
+#awk '{print ($1-xmin)*1e4,($2-ymin)*1e4,$4,$3/1e3 }' \
+#	xmin=$xmin ymin=$ymin file_ll_Qsup_e_ord.tmp > $fileout3
+
+#awk '{print $1,$2,$4,$3/1e3 }' file_ll_Qsup_e_ord.tmp > $fileout3
+
+rm file_*.tmp Qsup.tmp elevacio.tmp
+
+ghostview -forceorientation -portrait -forcemedia -a4 -magstep -3 $FILEPS &

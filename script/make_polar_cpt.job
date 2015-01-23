@@ -1,0 +1,69 @@
+#!/bin/zsh
+
+## Crea la paleta de color (hoot+cool) amb el 0 al centre i els maxims i minims del fitxer
+## Si Zmax i Zmin tenen el mateix signe, la paletta de color es el rainbow
+
+## output file: file_palette_cpt.tmp
+
+echo " (x,y,z) file ?"
+read file_in
+echo $file_in
+
+Dz_min=0.01
+z_petit=0.01
+wc $file_in | read nrow a b c        ## Palette
+sort -k 3,3nr -o file_ord_xy.tmp $file_in
+awk '{if(NR==1){printf "%10.6f", $3 }}' file_ord_xy.tmp | read z_max
+awk '{if(NR==nrow){printf "%10.6f", $3 }}' nrow=$nrow file_ord_xy.tmp | read z_min
+echo zmin= $z_min     zmax= $z_max   z_petit=$z_petit
+zzminmax=$(($z_max*$z_min*1000000))
+echo  zzminmax=  $zzminmax
+if [ $zzminmax -ge 0.0 ]
+then
+   echo ' Palette un sol signe'
+   Dz_total1=$(($z_max/13-$z_min/13)) 
+   awk '{if(NR==1){printf "%7.2f  %7.2f ", Dz_total1, Dz_min}}' \
+        Dz_total1=$Dz_total1 file_ord_xy.tmp > file_Dztotal_Dzmin.tmp
+   awk '{if($1<$2) {print $2} else {print $1} }' file_Dztotal_Dzmin.tmp | read Dz_total
+   echo Dz= $Dz_total
+   awk '{printf "%7.2f  %7.2f ", z_max+Dz_total, z_min-Dz_total }' \
+	z_max=$z_max z_min=$z_min Dz_total=$Dz_total file_Dztotal_Dzmin.tmp | read z_maxim z_minim
+   echo -T $z_minim/$z_maxim/$Dz_total
+   makecpt -Chaxby -T$z_minim/$z_maxim/$Dz_total > file_palette_cpt.tmp
+   exit
+fi
+
+awk '{if(NR==1){printf "%7.2f  %7.2f  %7.2f", sqrt(z_max*z_max)/7, sqrt(z_min*z_min)/7, Dz_min}}' \
+	z_max=$z_max z_min=$z_min Dz_min=$Dz_min file_ord_xy.tmp > file_Dzsup_Dzinf.tmp
+awk '{if($1<$3) {print $3} else {print $1} }' file_Dzsup_Dzinf.tmp | read Dz_sup
+awk '{if($2<$3) {print $3} else {print $2} }' file_Dzsup_Dzinf.tmp | read Dz_inf
+echo Dz_sup = $Dz_sup   Dz_inf = $Dz_inf
+
+z_min_pos=$((-1*$z_min))
+echo $z_min_pos  $z_max  $z_petit > file_z_min_max_petit.tmp
+
+# valors positius
+   awk '{if($2<=$3) {print $3*3} else {print $2} }' file_z_min_max_petit.tmp | read z_max
+   z_maxim=$(($z_max+$Dz_sup)) 
+#z_maxim=29
+   echo -T $z_petit/$z_maxim/$Dz_sup
+   makecpt -Ccool -T$z_petit/$z_maxim/$Dz_sup > file_palette_sup.tmp
+# valors negatius
+   awk '{if($1<=$3) {print $3*2} else {print $3+Dz_inf*7} }' Dz_inf=$Dz_inf file_z_min_max_petit.tmp | read z_inf
+#z_inf=60
+   echo -T -$z_inf/-$z_petit/$Dz_inf
+   makecpt -Chot -T-$z_inf/-$z_petit/$Dz_inf > file_palette_inf.tmp
+
+echo -$z_petit	255	255	255	$z_petit	255	255	255  > file_pallette_0.tmp
+wc file_palette_inf.tmp | read nrow a b c
+row0=$(($nrow-3)) 
+echo nrow = $nrow
+echo row0 = $row0
+awk '{if(NR<row0){print $0 }}' row0=$row0 file_palette_inf.tmp > file_palette_inf_0.tmp 
+awk '{if(NR==row0){print $1,$2,$3,$4,-1*z_petit,$6,$7,$8 }}' \
+	z_petit=$z_petit row0=$row0 file_palette_inf.tmp >> file_palette_inf_0.tmp 
+cat file_palette_inf_0.tmp file_pallette_0.tmp file_palette_sup.tmp > file_palette_cpt_A.tmp 
+
+awk '{if($1=="F"){print "F	255	0	255" } else {print $0 }}' file_palette_cpt_A.tmp > file_palette_cpt.tmp 
+
+rm file_palette_inf*.tmp file_palette_sup*.tmp file_pallette_0.tmp file_palette_cpt_A.tmp

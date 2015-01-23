@@ -1,0 +1,58 @@
+#!/bin/ksh
+
+figps6=Flitos.ps
+file1=Flit_Zmec_xy.res
+#file1=Pressio
+rm $figps6
+
+wc $file1 | read npunt a b c
+nawk '{if(NR==npunt) {print $1/1e3,$2/1e3} }' npunt=$npunt $file1 | read Xmax Ymax
+
+dx=16666
+dy=16666
+#dx=30.000
+#dy=30.000
+Xmin=0
+#Xmax=3000
+Ymin=0
+#Ymax=2000
+regio=$Xmin/$Xmax/$Ymin/$Ymax
+
+#################################################
+########## STRENGTH (Flit) ########
+nawk '{print $1/1e3,$2/1e3,$3/1e12 }' $file1 > file_Flit.tmp
+nawk '{if($4==1){print $1/1e3,$2/1e3,5,0,0,2,$4} }' $file1 > file_text1.tmp 
+nawk '{if($4==2){print $1/1e3,$2/1e3,5,0,0,2,$4} }' $file1 > file_text2.tmp 
+nawk '{if($4==3){print $1/1e3,$2/1e3,5,0,0,2,$4} }' $file1 > file_text3.tmp 
+psbasemap -Y16 -X1.5 -P -R$regio -Jx0.0064 -Ba200:." $file1 (10@+12@+ N/m)  \
+	":/a200:" ":WeSN -V -K > $figps6
+xyz2grd file_Flit.tmp -R -Gfile_grd.tmp -I$dx/$dy
+#blockmedian file_Flit.tmp -R -I$dx/$dy > file_bloc.tmp
+#surface file_bloc.tmp -R -Gfile_grd.tmp -I$dx/$dy 
+#############   Paleta Blanc i Negre  ############
+cat <<END>file_palette_cpt.tmp
+0.	20	20	20	5	20	20	20
+5	50	50	50	10	50	50	50
+10	100	100	100	15	100	100	100	
+15	150	150	150	20.	150	150	150
+20.	190	190	190	25.	190	190	190
+25.	230	230	230	30.	230	230	230
+30.	250	250	250	50.	250	250	250
+END
+#################################################
+#grdfilter file_grd.tmp -D4 -Fb200 -Gfile_grd_filt.tmp -V
+#grdsample file_grd_filt.tmp -Gfile_grd_sample.tmp -N100/100 -V -R
+file_grd=file_grd.tmp
+#grd2cpt $file_grd > file_palette_cpt.tmp
+grdview $file_grd -Jx -R -O -K -Cfile_palette_cpt.tmp -Qi50 -V >> $figps6 
+#psscale -Cfile_palette_cpt.tmp -L -D8.8/-2.5/17.8/.3h -B:." ": -O -K -V >> $figps6
+psscale -Cfile_palette_cpt.tmp -L -D10/-8/11/.3 -B:." ": -O -K -V >> $figps6
+#pscoast -R -Jx -Dl -A4 -W4/0 -K -O >> $figps6
+#pstext file_text1.tmp -G255/0/0 -R -Jx -O -K -N -V >> $figps6
+#pstext file_text2.tmp -G0/255/0 -R -Jx -O -K -N -V >> $figps6
+#pstext file_text3.tmp -G0/0/255 -R -Jx -O -K -N -V >> $figps6
+grdcontour $file_grd -C1 -A2f7 -G2/8 -W1/0 -Ba -O -Jx -R -V >> $figps6
+
+rm file_*.tmp
+
+gv -portrait -a4 -magstep -3 $figps6 &

@@ -1,0 +1,16 @@
+6	3.0	Body 1 (kpunts1, qFlit1=strenght_inside/strength)
+-100.D3	600.D3	x, y (counterclockwise)
+200.D3	610.D3
+400.D3  620.D3
+420.D3  800.D3
+440.D3	1100.D3
+-100.D3	1100.D3
+8	6.0	Body 2 (kpunts2, qFlit2)
+380.D3	-100.D3	x, y (counterclockwise)
+400.D3	0.D3
+500.D3	150.D3
+600.D3	225.D3
+700.D3	225.D3
+800.D3	150.D3
+900.D3	0.D3
+920.D3	-100.D3

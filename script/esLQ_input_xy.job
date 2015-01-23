@@ -1,0 +1,344 @@
+#!/bin/ksh
+
+##  Input file with a irregular grid, elevation, crust, litosphere and heat flow
+##  Output file with a regular grid
+
+DIR=`pwd`
+##### input ########
+#echo " Input file: x,y,elevation(m),crust(m),litosphere(m),heat flow (W/m2) ?"
+#ffile1=e_s_L_Qsup.xy   # x,y (no regular),elevation(m),crust(m),litosphere(m),heat flow (W/m2)
+echo " Input file: x(m), y(m), elevation(m), heat flow (W/m2) ?"
+read ffile1
+##### output ########
+FILEPS=eQ_uhuru.ps
+#file_out=eQ_uhuru.xy
+
+echo  " Post Script file:" $FILEPS
+echo " okey? 1-No"
+read okeyf
+   if [ $okeyf -eq 1 ]
+   then
+	echo  " Post Script file?"
+	read FILEPS
+   fi
+rm $FILEPS
+
+Tcolor=1
+
+Dx=47	  # km
+Dy=41.6   # km
+n=60
+m=40
+
+awk '{print n*Dx, m*Dy }' n=$n m=$m Dx=$Dx Dy=$Dy $ffile1 | read x2 y2
+x1=0
+y1=0
+
+regiol=$x1/$x2/$y1/$y2
+awk '{print x2+(x2-x1)/2.5,y2-(3*Dx) }' x1=$x1 x2=$x2 y2=$y2 Dx=$Dx $ffile1 | read xtit ytit
+
+echo "--------------------------------------------------------------"
+echo "   " Region real x, y: $regiol
+echo "--------------------------------------------------------------"
+echo " "
+echo 'Do you want to aplied a Gaussian filter for the data ?  1-yes' 
+read Sifilter
+   if [ $Sifilter -eq 1 ]
+   then
+	echo 'Gaussian wide in km?' 
+	read Gaussian
+   fi
+############################################################################
+##############  PRIMERA - elevacio ##########################################
+
+#awk '{print ($1*1e3,$2*1e3,$3) }' $ffile1 > file_xy.tmp
+#xytoll_reals	## input: file_xy.tmp,   output: file_ll.tmp
+
+awk '{print ($1/1e3,$2/1e3,$3/1e3) }' $ffile1 > file_ll.tmp
+
+blockmedian file_ll.tmp -R$regiol -I$Dx/$Dy -V > file_bloc.tmp
+surface file_bloc.tmp -R -Gfile_grd.tmp -I$Dx/$Dy -V
+if [ $Tcolor -eq 1 ]
+then
+cat <<END>file_palette_cpt.tmp
+-7     0    0  100    -5     0   27  200
+-5     0   27  200    -3     0  100  220	
+-3     0  100  220    -2     0  150  240	
+-2     0  150  220    -1     0  200  240	
+-1     0  200  240     -0.500     0  220  255	
+-0.5     0  220  255        0   120  255  255	
+0    75  180  155      0.100    75  200  125	
+0.100    75  200  125      0.200    75  235   75	
+0.200    75  235   75      0.500   125  255   75	
+0.500   150  255   75     1   175  255   75	
+1   200  255   75     1.5   200  200   75  
+1.5   180  160  100     2   180  160  100	
+2   255  255  255     3.5   255  255  255	
+END
+else
+cat <<END>file_palette_cpt.tmp
+0  	10      10      10      0.4	10      10      10
+0.4 	60      60      60      0.8	60      60      60
+0.8	100     100     100     1.2	100     100     100
+1.2	150     150     150     1.6	150     150     150
+1.6	200     200     200     2.0	200     200     200
+2.0	230     230     230     2.1	230     230     230
+2.1	255     255     255     3.5	255     255     255
+END
+fi 
+psbasemap -P -Y22 -X2 -R$regiol -Jx0.0038 -Ba400/a400WNes -K -V > $FILEPS
+##grdsample file_grd.tmp -Gfile_grd_sample.tmp -N101/101 -V 
+file_grd=file_grd.tmp
+   if [ $Sifilter -eq 1 ]
+   then
+	grdfilter file_grd.tmp -D0 -Fg$Gaussian -Gfile_grd_filt.tmp -V
+	file_grd=file_grd_filt.tmp
+   fi
+#grd2cpt $file_grd > file_palette_cpt.tmp
+grdimage $file_grd -Jx -R -O -K -Cfile_palette_cpt.tmp -V >> $FILEPS
+grdcontour $file_grd -Ba -C0.5 -A1f6 -G2.5/8 -W3/0 -O -K -Jx -R -V >> $FILEPS
+psscale -Cfile_palette_cpt.tmp -L -D14/2.7/5/.3 -B:."elevation (km)": -O -K -V >> $FILEPS
+pstext -R -Jx -O -K -N -V <<END>> $FILEPS
+#18 53.5 9 0 4 0  $DIR
+#$xtit $ytit 12 0 4 2  Gaussian $Gaussian km
+$xtit $ytit 12 0 4 2  elevation (km)
+#34 51.7 12 0 4 2  elevation (km)
+END
+
+grdsample $file_grd -Gfile_grdsample.tmp -R -I$Dx/$Dy -V
+grd2xyz file_grdsample.tmp -R$regio -V > file_xy.tmp
+sort -k 2,2n -k 1,1n -o filexy_elevation.tmp file_xy.tmp
+
+rm file_*.tmp
+#########################################################################
+#####################  SEGONA -  gruix cortical ###############################
+#awk '{print ($1*1e3,$2*1e3,$3+$4)}' $ffile1 > file_xy.tmp
+#xytoll_reals	## input: file_xy.tmp,   output: file_ll.tmp
+
+#awk '{print ($1,$2,$4/1e3)}' $ffile1 > file_ll.tmp
+
+blockmedian file_ll.tmp -R$regiol -I$Dx/$Dy -V > file_bloc.tmp
+surface file_bloc.tmp -R -Gfile_grd.tmp -I$Dx/$Dy -V
+if [ $Tcolor -eq 1 ]
+then
+cat <<END>file_palette_cpt.tmp
+20	255	0	255	24	255	0	255
+24	113	0	255	26	113	0	255
+26	0	28	255	28	0	28	255
+28	0	170	255	30	0	170	255
+30	0	255	199	32	0	255	199
+32	0	255	56	34	0	255	56
+34	85	255	0	36	85	255	0
+36	227	255	0	38	227	255	0
+38	255	142	0	40	255	142	0
+40	255	0	0	60	255	0	0
+END
+else
+cat <<END>file_palette_cpt.tmp
+20  	0       0       0       24	0       0       0
+24 	28      28      28      26	28      28      28
+26 	57      57      57      28	57      57      57
+28 	85      85      85      30	85      85      85
+30	113     113     113     32	113     113     113
+32	142     142     142     34	142     142     142
+34	170     170     170     36	170     170     170
+36	200     200     200     38	200     200     200
+38	227     227     227     40	227     227     227
+40	255     255     255     60	255     255     255
+END
+fi
+psbasemap -Y-6.9 -R -Jx -Ba400/a400Wnes -K -O -V >> $FILEPS
+file_grd=file_grd.tmp
+   if [ $Sifilter -eq 1 ]
+   then
+	grdfilter file_grd.tmp -D0 -Fg$Gaussian -Gfile_grd_filt.tmp -V
+	file_grd=file_grd_filt.tmp
+   fi
+grd2cpt $file_grd > file_palette_cpt.tmp
+grdimage $file_grd -Jx -R -O -K -Cfile_palette_cpt.tmp -V >> $FILEPS
+grdcontour $file_grd -Ba -C2.5 -A5f6 -G2.5/8 -O -K -Jx -R -V >> $FILEPS
+psscale -Cfile_palette_cpt.tmp -L -D14/2.7/5/.3 -B:."crustal thickness (km)  ": -O -K -V >> $FILEPS
+pstext -R -Jx -O -K -N -V <<END>> $FILEPS
+$xtit $ytit 12 0 4 2 crustal thickness (km) 
+#34 51.7 12 0 4 2 crustal thickness (km) 
+END
+
+grdsample $file_grd -Gfile_grdsample.tmp -R -I$Dx/$Dy -V
+grd2xyz file_grdsample.tmp -R$regio -V > file_xy.tmp
+sort -k 2,2n -k 1,1n -o filexy_crust.tmp file_xy.tmp
+
+rm file_*.tmp 
+
+#########################################################################
+################  TERCERA  - gruix litosferic ##########################
+if [ $Tcolor -eq 1 ]
+then
+cat <<END>file_palette_cpt.tmp
+70	255	0	255	80	255	0	255
+80	113	0	255	85	113	0	255
+85	0	28	255	90	0	28	255
+90	0	170	255	95	0	170	255
+95	0	255	199	100	0	255	199
+100	0	255	56	105	0	255	56
+105	85	255	0	110	85	255	0
+110	227	255	0	115	227	255	0
+115	255	142	0	120	255	142	0
+120	255	0	0	150	255	0	0
+END
+else
+cat <<END>file_palette_cpt.tmp
+70  	0       0       0       75	0       0       0
+75 	28      28      28      80	28      28      28
+80 	57      57      57      85	57      57      57
+85 	85      85      85      90	85      85      85
+90	113     113     113     95	113     113     113
+95	142     142     142     100	142     142     142
+100	170     170     170     105	170     170     170
+105	200     200     200     110	200     200     200
+110	227     227     227     115	227     227     227
+115	255     255     255     150	255     255     255
+END
+fi
+
+#awk '{print ($1*1e3,$2*1e3,$3+$5)}' $ffile1 > file_xy.tmp 
+#xytoll_reals	## input: file_xy.tmp,   output: file_ll.tmp
+
+#awk '{print ($1,$2,$5/1e3)}' $ffile1 > file_ll.tmp
+
+blockmedian file_ll.tmp -R$regiol -I$Dx/$Dy -V > file_bloc.tmp
+surface file_bloc.tmp -R -Gfile_grd.tmp -I$Dx/$Dy -V
+
+psbasemap -R -Y-6.9 -Jx -Ba400/a400Wnes -K -O -V >> $FILEPS
+#grdfilter file_grd.tmp -D0 -Fb200 -Gfile_grd_filt.tmp -V
+#grdsample litosfera_grd.tmp -Gfile_grd_sample.tmp -N100/100 -V -R
+file_grd=file_grd.tmp
+   if [ $Sifilter -eq 1 ]
+   then
+	grdfilter file_grd.tmp -D0 -Fg$Gaussian -Gfile_grd_filt.tmp -V
+	file_grd=file_grd_filt.tmp
+   fi
+grd2cpt $file_grd > file_palette_cpt.tmp
+grdimage $file_grd -Jx -R -O -K -Cfile_palette_cpt.tmp -V >> $FILEPS
+grdcontour $file_grd -Ba -C10 -A20f6 -G2.5/8 -O -K -Jx -R -V >> $FILEPS
+psscale -Cfile_palette_cpt.tmp -L -D14/2.7/5/.3 -B:."lithospheric thickness (km)": -O -K -V >> $FILEPS
+pstext -R -Jx -O -K -N -V <<END>> $FILEPS
+$xtit $ytit 12 0 4 2 lithospheric thickness (km)
+#34 51.7 12 0 4 2 lithospheric thickness (km)
+END
+
+grdsample $file_grd -Gfile_grdsample.tmp -R -I$Dx/$Dy -V
+grd2xyz file_grdsample.tmp -R$regio -V > file_xy.tmp
+sort -k 2,2n -k 1,1n -o filexy_litos.tmp file_xy.tmp
+
+rm file_*.tmp
+
+#########################################################################
+################  QUARTA - Flux de calor superficial ##########################
+#awk '{print ($1*1e3,$2*1e3,$9) }' $ffile1 > file_xy.tmp
+#xytoll_reals	## input: file_xy.tmp,   output: file_ll.tmp
+
+awk '{print ($1/1e3,$2/1e3,$4*1e3)}' $ffile1 > file_ll.tmp
+
+blockmedian file_ll.tmp -R$regiol -I$Dx/$Dy -V > file_bloc.tmp
+surface file_bloc.tmp -R -Gfile_grd.tmp -I$Dx/$Dy -V
+if [ $Tcolor -eq 1 ]
+then
+cat <<END>file_palette_cpt.tmp
+50	255	0	255	55	255	0	255
+55	113	0	255	60	113	0	255
+60	0	28	255	65	0	28	255
+65	0	170	255	70	0	170	255
+70	0	255	199	75	0	255	199
+75	0	255	56	80	0	255	56
+80	85	255	0	85	85	255	0
+85	227	255	0	90	227	255	0
+90	255	142	0	95	255	142	0
+95	255	0	0	100	255	0	0
+END
+else
+cat <<END>file_palette_cpt.tmp
+50  	0       0       0       55	0       0       0
+55 	28      28      28      60	28      28      28
+60 	57      57      57      65	57      57      57
+65 	85      85      85      70	85      85      85
+70	113     113     113     75	113     113     113
+75	142     142     142     80	142     142     142
+80	170     170     170     85	170     170     170
+85	200     200     200     90	200     200     200
+90	227     227     227     95	227     227     227
+95	255     255     255     100	255     255     255
+END
+fi
+
+psbasemap -R -Y-6.9 -Jx -Ba400/a400WSen -K -O -V >> $FILEPS
+#grdfilter file_grd.tmp -D0 -Fb200 -Gfile_grd_filt.tmp -V
+file_grd=file_grd.tmp
+   if [ $Sifilter -eq 1 ]
+   then
+	grdfilter file_grd.tmp -D0 -Fg$Gaussian -Gfile_grd_filt.tmp -V
+	file_grd=file_grd_filt.tmp
+   fi
+grd2cpt $file_grd > file_palette_cpt.tmp
+grdimage $file_grd -Jx -R -O -K -Cfile_palette_cpt.tmp -V >> $FILEPS
+grdcontour $file_grd -Ba -C5 -A10f6 -G2.5/8 -O -K -Jx -R -V >> $FILEPS
+psscale -Cfile_palette_cpt.tmp -L -D14/2.7/5/.3 -B:." ": -O -K -V >> $FILEPS
+pstext -R -Jx -O -N -V <<END>> $FILEPS
+$xtit $ytit 12 0 4 2 Surface heat flow (mW/m@+2@+)
+#34 51.7 12 0 4 2 Surface heat flow (mW/m@+2@+)
+END
+grdsample $file_grd -Gfile_grdsample.tmp -R -I$Dx/$Dy -V
+grd2xyz file_grdsample.tmp -R$regio -V > file_xy.tmp
+sort -k 2,2n -k 1,1n -o filexy_Qsup.tmp file_xy.tmp
+
+rm file_*.tmp 
+
+##   Crustal and Litospheric thickness
+#file_out=sL_uhuru.xy
+#echo  " OUTPUT FILE:" $file_out
+#echo " okey? 1-Si"
+#read okeyf
+#if [ $okeyf -eq 1 ]
+#then
+#paste filexy_crust.tmp filexy_litos.tmp > file_xyc_xyL.tmp
+##echo  $n   $m   $Dx   $Dy > $file_out
+#echo  "#  Azores - Algeria " > $file_out
+#awk '{if ($1==$4 && $2==$5) {print $1*1e3,$2*1e3,$3*1e3,$6*1e3,0.0} else \
+#	{print " file is not arranged"}}' file_xyc_xyL.tmp >> $file_out
+#fi
+
+## Minimum of the crust and Litosphere
+#smin=5000
+#awk '{if ($1!="#" && $3<smin) {print $1,$2,smin,$4,$5} else \
+#	{print $0 }}' smin=$smin $file_out > FILE_smin.xy
+#Lmin=20000
+#awk '{if ($1!="#" && $4<Lmin) {print $1,$2,$3,Lmin,$5} else \
+#	{print $0 }}' Lmin=$Lmin FILE_smin.xy > FILE_sLmin.xy
+
+##   Elevation and Heat Flow
+file_out=eQ_uhuru.xy
+echo  " OUTPUT FILE:" $file_out
+echo " okey? 1-Si"
+read okeyf
+if [ $okeyf -eq 1 ]
+then
+   paste filexy_elevation.tmp filexy_Qsup.tmp > file_xye_xyQ.tmp
+   awk '{if ($1==$4 && $2==$5) {print $1*1e3,$2*1e3,$3*1e3,$6/1e3} else \
+	{print " file is not arranged"}}' file_xye_xyQ.tmp > $file_out
+fi
+
+
+##   file:   x,y,e,s,L,Q
+#paste filexy_elevation.tmp filexy_crust.tmp > file_xye_xyc.tmp
+#awk '{if ($1==$4 && $2==$5) {print $1,$2,$3*1e3,$6*1e3} else \
+#	{print " file is not arranged"}}' file_xye_xyc.tmp > file_xyec.tmp
+#paste filexy_litos.tmp filexy_Qsup.tmp > file_xyL_xyQ.tmp
+#awk '{if ($1==$4 && $2==$5) {print $1,$2,$3*1e3,$6/1e3} else \
+#	{print " file is not well arranged"}}' file_xyL_xyQ.tmp > file_xyLQ.tmp	
+#paste file_xyec.tmp file_xyLQ.tmp > file_xyec_xyLQ.tmp
+#awk '{if ($1==$5 && $2==$6) {print $1,$2,$3,$4,$7,$8} else \
+#	{print " file is not well arranged"}}' file_xyec_xyLQ.tmp > file_xyesLQ.tmp
+	
+	
+rm file*.tmp 
+
+ghostview -forceorientation -portrait -forcemedia -a4 -magstep -3 $FILEPS &
